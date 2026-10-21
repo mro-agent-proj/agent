@@ -53,6 +53,13 @@ class RagSearch:
         self.database, self.secret, self.encoder = database, cursor_secret.encode(), encoder
         self.encode_lock = asyncio.Lock()
 
+    async def preload_encoder(self):
+        """Load the pinned model before accepting calls with a ten-second client timeout."""
+        async with self.encode_lock:
+            if self.encoder is None:
+                self.encoder = await asyncio.to_thread(LocalEncoder)
+            await asyncio.to_thread(self.encoder.encode, ["maintenance"], query=True)
+
     async def run(self, name, args, claims):
         """Returns the response dict for one tool call; raises ToolFailure for caller-actionable outcomes."""
         out = new_result(name, args)

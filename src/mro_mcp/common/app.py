@@ -43,6 +43,7 @@ class McpServer(FastMCP):
         allowed_hosts,
         instructions=None,
         http_middleware=(),
+        startup=None,
     ):
         super().__init__(
             name,
@@ -54,10 +55,13 @@ class McpServer(FastMCP):
             transport_security=TransportSecuritySettings(allowed_hosts=list(allowed_hosts)),
         )
         self.database = database
+        self.startup_hook = startup
         self.http_middleware = list(http_middleware)
         self._responses: dict[str, type[ResponseBase]] = {}
         self._parameters: dict[str, set[str]] = {}
         self.custom_route("/health", methods=["GET"])(self._health)
+        self.custom_route("/health/ready", methods=["GET"])(self._health)
+        self.custom_route("/health/live", methods=["GET"])(self._live)
 
     def add_tool(self, fn, name=None, **kwargs):
         response_cls = get_type_hints(fn).get("return")
@@ -122,6 +126,9 @@ class McpServer(FastMCP):
             (time.monotonic() - started) * 1000,
         )
 
+    async def _live(self, request):
+        return JSONResponse({"status": "ok"})
+
     async def _health(self, request):
         try:
             await self.database.ping()
@@ -136,8 +143,10 @@ class McpServer(FastMCP):
         @asynccontextmanager
         async def lifespan(starlette_app):
             # Deployment errors (wrong DB role, unreachable DB) must fail before accepting requests.
-            await self.database.startup()
             try:
+                await self.database.startup()
+                if self.startup_hook is not None:
+                    await self.startup_hook()
                 async with session_lifespan(starlette_app):
                     yield
             finally:
