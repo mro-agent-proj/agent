@@ -3,7 +3,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 import jwt
-from sqlalchemy import func, insert, select, text, update
+from sqlalchemy import insert, select, text, update
 
 from . import db
 
@@ -67,7 +67,8 @@ async def publish_context(
     """Backend integration API, NOT MCP. Caller must already verify aircraft and mappings.
 
     Call within the Backend request transaction. Existing run snapshots are immutable.
-    Changed request conditions require a new run and revoke old context versions.
+    Unchanged conditions may start another run at the same context version.
+    Changed conditions require a newer version and revoke older context versions.
     """
     if type(context_version) is not int or context_version < 1 or seconds <= 0:
         raise ValueError("Invalid context version or lifetime")
@@ -99,13 +100,30 @@ async def publish_context(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
         {"key": f"context:{tenant_id}:{request_id}"},
     )
-    latest = await conn.scalar(
-        select(func.max(db.contexts.c.context_version)).where(
-            db.contexts.c.request_id == request_id, db.contexts.c.tenant_id == tenant_id
+    previous = (
+        (
+            await conn.execute(
+                select(db.contexts)
+                .where(db.contexts.c.request_id == request_id, db.contexts.c.tenant_id == tenant_id)
+                .order_by(db.contexts.c.context_version.desc())
+                .limit(1)
+            )
         )
+        .mappings()
+        .first()
     )
-    if latest is not None and context_version <= latest:
-        raise ValueError("Context version must increase; do not republish an existing run")
+    if previous is not None:
+        if context_version < previous["context_version"]:
+            raise ValueError("Context version must increase; cannot restore an older version")
+        if context_version == previous["context_version"]:
+            conditions = {
+                "operator_code": operator_code,
+                "model_key": model_key,
+                "mapping_revision": mapping_revision,
+                "locked_filters": filters,
+            }
+            if any(previous[key] != value for key, value in conditions.items()):
+                raise ValueError("Changed search conditions require a new context version")
     ready_release = await conn.scalar(
         select(db.releases.c.id).where(db.releases.c.id == release_id, db.releases.c.state == "READY")
     )

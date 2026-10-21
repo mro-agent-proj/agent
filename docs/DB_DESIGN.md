@@ -43,7 +43,7 @@ JASC는 문자열 4자리로 보존하고 ATA·AMM 번호·부서로 자동 변�
 
 ## 실행 컨텍스트와 읽기 전용
 
-Backend가 `rag_request_contexts`에 request/run/subject/tenant/context_version, operator/model, release_id, index_key 배열, mapping_revision, locked_filters, 만료·활성 여부를 게시합니다. [내부 계약](../integration/backend/README.md)에 연결 규칙이 있습니다. `publish_context`는 단조 증가 버전과 불변 스냅샷을 강제하는 참조 구현입니다.
+Backend가 `rag_request_contexts`에 request/run/subject/tenant/context_version, operator/model, release_id, index_key 배열, mapping_revision, locked_filters, 만료·활성 여부를 게시합니다. [내부 계약](../integration/backend/README.md)에 연결 규칙이 있습니다. `publish_context`는 버전 역행·동일 버전의 조건 변경을 막고 실행별 불변 스냅샷을 강제하는 참조 구현입니다.
 
 서버는 매 호출 위임 JWT와 DB 컨텍스트를 대조하고 READ ONLY/REPEATABLE READ 트랜잭션에서 조회합니다. 다른 접수·사용자·버전·철회된 실행은 거부합니다. 미확정 operator/model은 NEEDS_INPUT이며 전체 범위로 확대하지 않습니다. R01 코드표만 항공사·모델 필터를 사용하지 않습니다.
 

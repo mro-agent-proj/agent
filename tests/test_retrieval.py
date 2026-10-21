@@ -252,3 +252,31 @@ def test_flyway_and_local_migration_match():
     sql = Path("integration/backend/V3__rag_evidence.sql").read_text()
     actual = "\n".join(line for line in sql.splitlines() if not line.startswith("--")).strip()
     assert actual == ";\n\n".join(statements) + ";"
+
+
+async def test_new_run_same_conditions_can_reuse_context_version(setup_db):
+    from uuid import uuid4
+
+    from mro_rag.context import publish_context
+
+    owner, _, svc, rid, _ = setup_db
+    claims, args = await make_context(owner, rid)
+    kwargs = dict(
+        request_id=claims["request_id"],
+        context_version=1,
+        subject_id="alice",
+        tenant_id="tenant-a",
+        operator_code="TESTA",
+        model_key="A320214",
+        release_id=rid,
+        mapping_revision="synthetic-v1",
+    )
+    run_id = uuid4().hex
+    async with owner.begin() as conn:
+        await publish_context(conn, run_id=run_id, **kwargs)
+    for caller in [claims, dict(claims, run_id=run_id)]:
+        result = await svc.invoke("search_sdr_cases", dict(args, query="wheel"), caller)
+        assert result["status"] == "OK"
+    with pytest.raises(ValueError, match="Changed search conditions"):
+        async with owner.begin() as conn:
+            await publish_context(conn, run_id=uuid4().hex, **dict(kwargs, operator_code="OTHER"))

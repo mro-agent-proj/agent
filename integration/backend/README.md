@@ -25,7 +25,7 @@ Backend는 접수 권한을 확인한 뒤 `public.rag_request_contexts`에 다�
 |---|---|
 | run_id | 실행 식별자, 새 실행마다 고유 |
 | request_id | 실제 repair_requests.id 문자열 |
-| context_version | 접수별 단조 증가하는 검색 조건 버전. JPA 낙관적 잠금 version과 자동 동일시하지 않음 |
+| context_version | 검색 조건 변경 시 증가하는 접수별 버전. 같은 조건의 새 run은 같은 버전 사용 가능. JPA 낙관적 잠금 version과 자동 동일시하지 않음 |
 | subject_id, tenant_id | Backend가 접근권한을 확인한 사용자·범위 식별자. LLM 입력 금지 |
 | operator_code, model_key | 검증된 서비스→SDR 매핑. 미확정은 null이며 범위 검색 NEEDS_INPUT |
 | release_id | READY knowledge_releases.id |
@@ -57,6 +57,6 @@ Backend 항공사 3개와 검색 데이터 operator_code 24개는 코드 체계�
 - aircraft 20대: KAL 7 / AAR 7 / JNA 6. 상세 모델 10종.
 - maintenance_history 1,499건: 모든 jasc_code가 4자리이며 현재 548개 코드표에 존재합니다. V2 컬럼은 nullable이므로 미래 null을 추정으로 채우지 않습니다.
 - ATA 2자리와 JASC 4자리를 별도로 보존합니다. S21의 3230/3242, S22의 2160/2150을 앞 두 자리로 합치지 않습니다.
-- scenarios.md는 S01~S22 + V1~V6, 총 28건입니다. 이 저장소의 14개 테스트와 별개이며 28개 업무 시나리오 전체를 통과했다고 주장하지 않습니다.
+- scenarios.md는 S01~S22 + V1~V6, 총 28건입니다. 이 저장소의 15개 테스트와 별개이며 28개 업무 시나리오 전체를 통과했다고 주장하지 않습니다.
 - 실제 CSV reported_at 범위는 **2024-01-16T11:38:00Z~2026-10-19T10:52:00Z**로, 메시지의 2025-10-21~2026-10-20과 다릅니다. 시나리오 날짜 기준은 팀 시드 파일과 맞춰야 합니다.
 - 업무 시드는 Backend SeedLoader가 소유합니다. RAG 적재기는 aircraft/maintenance_history를 복제하거나 덮어쓰지 않습니다.
