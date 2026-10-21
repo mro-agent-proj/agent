@@ -18,7 +18,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 EXPOSE 8101
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/health', timeout=2)"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/health/ready', timeout=2)"
 
 USER nobody
 CMD ["mro-business-mcp"]

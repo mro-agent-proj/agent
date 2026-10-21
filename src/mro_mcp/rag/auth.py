@@ -11,13 +11,13 @@ principal: ContextVar[dict | None] = ContextVar("rag_principal", default=None)
 
 
 class BearerAuthMiddleware:
-    """Rejects /mcp without a valid token; /health stays open for container health checks."""
+    """Rejects /mcp without a valid token; exact health paths stay open for probes."""
 
     def __init__(self, app, secret):
         self.app, self.secret = app, secret
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["path"] == "/health":
+        if scope["type"] != "http" or scope["path"] in {"/health", "/health/live", "/health/ready"}:
             return await self.app(scope, receive, send)
         headers = {k.lower(): v for k, v in scope["headers"]}
         try:

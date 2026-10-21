@@ -1,23 +1,45 @@
-# MCP servers attached to the backend's shared Postgres.
-# Start the backend stack first (backend repo: docker compose up -d), then:
-#   docker compose -f compose.mcp.yaml up -d --build
+# Backend owns Postgres, migrations, accounts and data restoration.
+# Fill .env.mcp from .env.mcp.example, then:
+# docker compose --env-file .env.mcp -f compose.mcp.yaml up -d --build
 services:
   business-mcp:
     build:
       context: .
       dockerfile: docker/business-mcp.Dockerfile
     environment:
-      BUSINESS_DATABASE_URL: postgresql+asyncpg://mro_business_reader:${MRO_BUSINESS_READER_PASSWORD:-local-business-reader-only}@postgres:5432/mro
+      BUSINESS_DATABASE_URL: ${BUSINESS_DATABASE_URL:?Set the mro_business_reader URL in .env.mcp}
       BUSINESS_ALLOWED_HOSTS: 127.0.0.1:*,localhost:*,business-mcp:*
       BUSINESS_SOURCE_VERSION: ${BUSINESS_SOURCE_VERSION:-backend-seed}
     ports:
-      - "8101:8101"
+      - "127.0.0.1:8101:8101"
     networks:
       - backend
     restart: unless-stopped
 
+  rag-mcp:
+    build:
+      context: .
+      dockerfile: docker/rag-mcp.Dockerfile
+    environment:
+      RAG_DATABASE_URL: ${RAG_DATABASE_URL:?Set the mro_reader URL in .env.mcp}
+      RAG_JWT_SECRET: ${RAG_JWT_SECRET:?Set the backend-compatible signing secret}
+      RAG_CURSOR_SECRET: ${RAG_CURSOR_SECRET:?Set a separate cursor secret}
+      RAG_ALLOWED_HOSTS: 127.0.0.1:*,localhost:*,rag-mcp:*
+      RAG_PRELOAD_ENCODER: "true"
+      HF_HOME: /var/cache/mro/huggingface
+      MRO_EMBED_DEVICE: cpu
+    volumes:
+      - rag-model-cache:/var/cache/mro
+    ports:
+      - "127.0.0.1:8102:8102"
+    networks:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  rag-model-cache:
+
 networks:
   backend:
-    # The backend compose project's default network (backend repo cloned as ./backend).
     name: ${BACKEND_NETWORK:-backend_default}
     external: true

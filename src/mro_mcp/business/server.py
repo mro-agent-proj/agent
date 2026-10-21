@@ -24,6 +24,11 @@ def create_server(database_url=None, source_version=None):
     return mcp
 
 
+def create_app():
+    """ASGI factory for a standalone MCP process; the AI FastAPI app remains separate."""
+    return create_server().streamable_http_app()
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     create_server().run(transport="streamable-http")

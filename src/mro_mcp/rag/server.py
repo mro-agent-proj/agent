@@ -18,6 +18,7 @@ def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encode
     if min(len(jwt_secret), len(cursor_secret)) < 32 or jwt_secret == cursor_secret:
         raise ValueError("Use distinct JWT/cursor secrets with at least 32 characters each")
     database = ReadOnlyDatabase(database_url or os.environ["RAG_DATABASE_URL"], schemas=("public", "rag"))
+    search = RagSearch(database, cursor_secret, encoder)
     mcp = McpServer(
         "mro-rag",
         database=database,
@@ -27,8 +28,9 @@ def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encode
         allowed_hosts=os.environ.get("RAG_ALLOWED_HOSTS", DEFAULT_HOSTS).split(","),
         instructions="JASC 코드표, SDR 사례, SDR에 인용된 AMM 참조와 근거 원문을 조회하는 읽기 전용 도구입니다.",
         http_middleware=[(BearerAuthMiddleware, {"secret": jwt_secret})],
+        startup=search.preload_encoder if os.environ.get("RAG_PRELOAD_ENCODER", "false").lower() == "true" else None,
     )
-    tools.register(mcp, RagSearch(database, cursor_secret, encoder))
+    tools.register(mcp, search)
     return mcp
 
 

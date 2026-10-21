@@ -10,6 +10,7 @@
 .env
 .env.*
 !.env.example
+!.env.mcp.example
 .venv/
 venv/
 __pycache__/

@@ -1,0 +1,11 @@
+# Send only runtime sources and dependency metadata to the Docker builder.
+**
+!src/
+!src/**
+src/**/__pycache__/
+src/**/*.pyc
+!pyproject.toml
+!uv.lock
+!.python-version
+!docker/
+!docker/*.Dockerfile
