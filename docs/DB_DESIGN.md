@@ -1,6 +1,6 @@
 # PostgreSQL·pgvector 구현
 
-기준일 2026-10-21. 실행 가능한 컬럼·제약의 기준은 [SQLAlchemy metadata](../src/mro_rag/db.py), 배포 이력은 [고정 Alembic 마이그레이션](../migrations/versions/0001_rag.py)과 동일 내용의 [Backend Flyway SQL](../integration/backend/V3__rag_evidence.sql)입니다. 공유 DB에서는 Flyway만 실행합니다. [ERD](erd.mmd)는 관계를 요약합니다.
+기준일 2026-10-21, 팀 규약 본문 v0.3 반영. **공유 DB 스키마의 기준은 Backend Flyway 이력**입니다. 현재 Backend V3는 [제공 SQL](../integration/backend/V3__rag_evidence.sql)과 출처 주석 외 내용이 같습니다. 우리 [SQLAlchemy metadata](../src/mro_rag/db.py)와 [고정 Alembic 마이그레이션](../migrations/versions/0001_rag.py)은 격리 로컬 제작·검증에 사용하며 공유 DB에는 실행하지 않습니다. [ERD](erd.mmd)는 관계를 요약합니다.
 
 ## 테이블
 
@@ -43,7 +43,7 @@ JASC는 문자열 4자리로 보존하고 ATA·AMM 번호·부서로 자동 변�
 
 ## 실행 컨텍스트와 읽기 전용
 
-Backend가 `rag_request_contexts`에 request/run/subject/tenant/context_version, operator/model, release_id, index_key 배열, mapping_revision, locked_filters, 만료·활성 여부를 게시합니다. [내부 계약](../integration/backend/README.md)에 연결 규칙이 있습니다. `publish_context`는 버전 역행·동일 버전의 조건 변경을 막고 실행별 불변 스냅샷을 강제하는 참조 구현입니다.
+현재 구현안은 Backend가 `rag_request_contexts`에 request/run/subject/tenant/context_version, operator/model, release_id, index_key 배열, mapping_revision, locked_filters, 만료·활성 여부를 게시하는 구조입니다. **최신 PDF에서는 전달 방식이 아직 미정**이며 Backend가 실제 게시하고 있다는 뜻은 아닙니다. [내부 계약](../integration/backend/README.md)에 연결 규칙이 있습니다. `publish_context`는 버전 역행·동일 버전의 조건 변경을 막고 실행별 불변 스냅샷을 강제하는 참조 구현입니다.
 
 서버는 매 호출 위임 JWT와 DB 컨텍스트를 대조하고 READ ONLY/REPEATABLE READ 트랜잭션에서 조회합니다. 다른 접수·사용자·버전·철회된 실행은 거부합니다. 미확정 operator/model은 NEEDS_INPUT이며 전체 범위로 확대하지 않습니다. R01 코드표만 항공사·모델 필터를 사용하지 않습니다.
 
@@ -51,6 +51,8 @@ Backend가 `rag_request_contexts`에 request/run/subject/tenant/context_version,
 
 ## 적재·운영
 
-DDL 생성 → manifest/원본 검증 → release 및 JASC/SDR/AMM/청크/연결/근거의 단일 트랜잭션 적재 → 관계형 READY → 별도 전체 임베딩 트랜잭션 → vector READY 순서입니다. 실패하면 일부 자료를 공개하지 않습니다. 오프라인 운영 계정만 쓰고 MCP 계정은 열 개 테이블 SELECT만 허용합니다.
+격리 로컬 제작은 DDL 생성 → manifest/원본 검증 → release 및 JASC/SDR/AMM/청크/연결/근거의 단일 트랜잭션 적재 → 관계형 READY → 별도 전체 임베딩 트랜잭션 → vector READY 순서입니다. 검증한 데이터 9개 테이블을 data-only dump로 전달하며 런타임 rag_request_contexts는 제외합니다.
+
+공유 DB에서는 Backend가 Flyway V1~V4 → 업무 SeedLoader → 별도 `scripts/rag-restore.sh` 순서로 생성·복원합니다. 우리 저장소의 적재·임베딩 명령을 공유 DB에서 실행하지 않습니다. MCP 계정은 열 개 테이블 SELECT만 사용합니다. 새 release/색인으로 갱신하는 배포 절차는 Backend와 별도 합의하며 초기 빈 DB 복원 스크립트로 덮어쓰지 않습니다.
 
 FK는 기본 삭제 제한을 사용합니다. 실행 중 release/색인을 삭제하거나 기존 원본을 덮어쓰는 관리 API는 제공하지 않습니다. 자동 downgrade는 지원하지 않습니다. 재현 절차는 [RUNBOOK](RUNBOOK.md), 실측은 [검증 보고서](../reports/implementation-review.md)입니다.

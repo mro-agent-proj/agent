@@ -10,15 +10,16 @@ SDR 사례·AMM 참조·JASC를 PostgreSQL 16과 pgvector에 적재하고, 읽�
 - 요청별 위임 토큰, 범위·버전·색인 고정, 서명 cursor, SELECT 전용 DB 역할.
 - 로컬 PostgreSQL·실제 HTTP MCP 테스트 및 전체 데이터 한국어/영어 검색→근거 원문 일치 검증.
 
-**Backend와의 종단 간 연결은 아직입니다.** 실제 Backend는 Spring Boot·Flyway·RabbitMQ이며, 위임 컨텍스트 전달·배정 전 근거 검증·항공사/모델 매핑 연결이 남아 있습니다. [Backend 통합 안내](integration/backend/README.md)에 수정 위치와 제공 SQL을 정리했습니다. `business-mcp`, RabbitMQ 소비자와 LLM 노드는 이 저장소의 구현 범위가 아닙니다.
+**Backend와의 종단 간 연결은 아직입니다.** 최신 팀 인터페이스 본문 v0.3과 Backend `0fc8caf` 기준으로 pgvector·Flyway V3/V4·덤프 복원 스크립트는 Backend에 반영됐습니다. 공유 DB·전체 데이터 관리는 Backend가 소유하고 이 저장소는 로컬 제작·검증 후 덤프를 전달합니다. 인증/컨텍스트·시연 검색 범위 결정과 AI의 완료 전 근거 검증 연결이 남아 있습니다. `business-mcp`, RabbitMQ 소비자와 LLM 노드는 현재 구현 범위가 아닙니다.
 
 ## 실행·문서
 
-1. [실행 안내](docs/RUNBOOK.md): DB 생성, 적재, 임베딩, MCP 실행, 테스트
+1. [실행 안내](docs/RUNBOOK.md): 격리 로컬 DB 제작, 적재, 임베딩, MCP 실행, 테스트
 2. [Backend 통합 안내](integration/backend/README.md): 현재 Backend 기준, Flyway SQL, 내부 컨텍스트 계약
 3. [DB 설계](docs/DB_DESIGN.md), [데이터 매핑](docs/DATA_MAPPING.md), [도구 계약](docs/INTEGRATION_CONTRACT.md)
 4. [검증 결과](reports/implementation-review.md), [전체 데이터 실행 결과](reports/runtime-verification.json)
 5. [팀 확인 사항](docs/TEAM_DISCUSSION.md), [작업 현황](docs/WORK_PLAN.md)
+6. [작업 규칙](AGENTS.md), [팀 v0.3 변경·충돌 검토](reports/team-interface-v03-review.md)
 
 ```sh
 uv sync --frozen --extra dev --extra embedding

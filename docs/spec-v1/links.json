@@ -2,7 +2,14 @@
   "google_doc": "https://docs.google.com/document/d/1gyMiTHTtQQ329pOZlAJfNGpa3mmcJO0s-gdOF82bCpA",
   "version": "1.0",
   "date": "2026-10-21",
-  "source": "separately retained local Google document snapshot",
+  "source": "Google MCP v1.0 re-read through connected Drive on 2026-10-21",
+  "team_interface": {
+    "body_version": "0.3",
+    "local_file": "MRO Agent 팀 인터페이스 규약 v0.1 (3).pdf",
+    "pages": 29,
+    "sha256": "123258608c19ee40d4c754ab73e45f94b6651ffa3edb153b1b963b0a70315b6f",
+    "review": "../../reports/team-interface-v03-review.md"
+  },
   "contracts": "mcp-tool-contracts.json",
   "implementation_status": "R01_R02_R03_R05_implemented_backend_integration_pending"
 }
