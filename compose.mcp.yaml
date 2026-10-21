@@ -1,0 +1,23 @@
+# MCP servers attached to the backend's shared Postgres.
+# Start the backend stack first (backend repo: docker compose up -d), then:
+#   docker compose -f compose.mcp.yaml up -d --build
+services:
+  business-mcp:
+    build:
+      context: .
+      dockerfile: docker/business-mcp.Dockerfile
+    environment:
+      BUSINESS_DATABASE_URL: postgresql+asyncpg://mro_business_reader:${MRO_BUSINESS_READER_PASSWORD:-local-business-reader-only}@postgres:5432/mro
+      BUSINESS_ALLOWED_HOSTS: 127.0.0.1:*,localhost:*,business-mcp:*
+      BUSINESS_SOURCE_VERSION: ${BUSINESS_SOURCE_VERSION:-backend-seed}
+    ports:
+      - "8101:8101"
+    networks:
+      - backend
+    restart: unless-stopped
+
+networks:
+  backend:
+    # The backend compose project's default network (backend repo cloned as ./backend).
+    name: ${BACKEND_NETWORK:-backend_default}
+    external: true

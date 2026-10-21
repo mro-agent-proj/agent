@@ -1,4 +1,4 @@
-.PHONY: db migrate seed embed serve test lint
+.PHONY: db migrate seed embed serve serve-business test lint
 db:
 	docker compose up -d db
 migrate:
@@ -9,6 +9,8 @@ embed:
 	uv run --extra embedding mro-rag embed --release "$(RELEASE)"
 serve:
 	uv run --extra embedding mro-rag serve
+serve-business:
+	uv run mro-business-mcp
 test:
 	uv run --extra dev pytest
 lint:
