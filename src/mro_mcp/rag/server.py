@@ -5,8 +5,7 @@ import os
 
 from ..common.app import McpServer
 from ..common.db import ReadOnlyDatabase
-from . import tools
-from .auth import BearerAuthMiddleware
+from . import auth, tools
 from .search import RagSearch
 
 DEFAULT_HOSTS = "127.0.0.1:*,localhost:*,testserver"
@@ -27,7 +26,7 @@ def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encode
         # Docker clients send the service name as Host (e.g. rag-mcp:8102).
         allowed_hosts=os.environ.get("RAG_ALLOWED_HOSTS", DEFAULT_HOSTS).split(","),
         instructions="JASC 코드표, SDR 사례, SDR에 인용된 AMM 참조와 근거 원문을 조회하는 읽기 전용 도구입니다.",
-        http_middleware=[(BearerAuthMiddleware, {"secret": jwt_secret})],
+        http_middleware=[auth.middleware(jwt_secret)],
         startup=search.preload_encoder if os.environ.get("RAG_PRELOAD_ENCODER", "false").lower() == "true" else None,
     )
     tools.register(mcp, search)

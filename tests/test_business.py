@@ -13,6 +13,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from mcp.shared.memory import create_connected_server_and_client_session
 
+from mro_mcp.business import auth
 from mro_mcp.business.server import create_server
 from mro_mcp.business.tools import STATUS_MAP, decode_cursor, encode_cursor, history_filter_key
 
@@ -45,16 +46,80 @@ def legacy_validators():
 LEGACY = legacy_validators()
 
 
-async def call(mcp, name, args):
-    async with create_connected_server_and_client_session(mcp._mcp_server) as session:
-        result = await session.call_tool(name, args)
+JWT_SECRET = "business-test-secret-" * 2
+
+
+def claims_for(request_id):
+    """What BearerAuthMiddleware sets from a backend token issued for this request."""
+    return {"sub": "reporter", "tenant_id": "KAL", "run_id": "run-1", "request_id": str(request_id), "context_version": 1}
+
+
+async def call(mcp, name, args, claims="from-args"):
+    if claims == "from-args":
+        claims = claims_for(args.get("request_id", REQUEST_ID))
+    token = auth.principal.set(claims)
+    try:
+        async with create_connected_server_and_client_session(mcp._mcp_server) as session:
+            result = await session.call_tool(name, args)
+    finally:
+        auth.principal.reset(token)
     LEGACY[name].validate(result.structuredContent)
     return result
 
 
 @pytest.fixture
 def offline_server():
-    return create_server(database_url="postgresql+asyncpg://unused@127.0.0.1:1/unused")
+    return create_server(database_url="postgresql+asyncpg://unused@127.0.0.1:1/unused", jwt_secret=JWT_SECRET)
+
+
+def test_server_requires_a_signing_secret():
+    with pytest.raises(ValueError, match="BUSINESS_JWT_SECRET"):
+        create_server(database_url="postgresql+asyncpg://unused@127.0.0.1:1/unused", jwt_secret="short")
+
+
+@pytest.mark.parametrize(
+    "name, args",
+    [
+        ("get_request_context", {"request_id": REQUEST_ID}),
+        ("get_aircraft_history", {"request_id": REQUEST_ID, "context_version": 1}),
+        ("search_departments", {"request_id": REQUEST_ID, "context_version": 1}),
+    ],
+)
+async def test_tools_read_only_the_request_in_the_token(offline_server, name, args):
+    for claims in (None, claims_for("00000000-0000-4000-8000-000000000000")):
+        result = await call(offline_server, name, args, claims=claims)
+        assert result.isError is True
+        assert result.structuredContent["error"]["code"] == "FORBIDDEN"
+
+
+async def test_http_requires_a_backend_token_for_this_audience():
+    """The middleware runs before the MCP app: no token, a rag token or a bad signature are all 401."""
+    import httpx
+    import jwt as pyjwt
+
+    from mro_rag.context import issue_token
+
+    seen = []
+
+    async def app(scope, receive, send):
+        seen.append(auth.principal.get())
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    cls, kwargs = auth.middleware(JWT_SECRET)
+    transport = httpx.ASGITransport(app=cls(app, **kwargs))
+    base = dict(subject_id="reporter", tenant_id="KAL", run_id="run-1", request_id=REQUEST_ID, context_version=1)
+    good = issue_token(JWT_SECRET, **base, audience=auth.AUDIENCE)
+    rag = issue_token(JWT_SECRET, **base)
+    forged = issue_token("another-secret-" * 3, **base, audience=auth.AUDIENCE)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        assert (await client.get("/health")).status_code == 200
+        assert (await client.post("/mcp")).status_code == 401
+        for token in (rag, forged, "not-a-jwt"):
+            assert (await client.post("/mcp", headers={"Authorization": "Bearer " + token})).status_code == 401
+        assert (await client.post("/mcp", headers={"Authorization": "Bearer " + good})).status_code == 200
+    assert seen[-1]["request_id"] == REQUEST_ID
+    assert pyjwt.decode(good, options={"verify_signature": False})["aud"] == "mro-business"
 
 
 async def test_tools_are_read_only_with_generated_schemas(offline_server):
@@ -128,7 +193,7 @@ needs_db = pytest.mark.skipif(
 
 @pytest.fixture
 async def server():
-    mcp = create_server(database_url=DB_URL)
+    mcp = create_server(database_url=DB_URL, jwt_secret=JWT_SECRET)
     await mcp.database.startup()
     yield mcp
     await mcp.database.shutdown()

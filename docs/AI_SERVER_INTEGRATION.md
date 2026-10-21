@@ -75,7 +75,22 @@ MCP 프로세스는 RabbitMQ를 소비하거나 LLM을 실행하지 않는다.
 - 세 주소는 토큰 없이 호출할 수 있다. `/mcp`의 RAG 인증은 유지한다.
 - healthy는 도구별 SELECT 권한, 데이터 완전성, 요청 권한·검색 범위의 일치까지 보장하지 않는다.
 
-## 전체 통합 전에 남은 조건
+## 연결 상태 (2026-10-21 갱신)
+
+아래 조건 1·2·3은 Backend `McpDelegationService`·Flyway V6와 이 저장소의 business 인증으로 연결했다.
+
+- 업무 조회 권한: Backend V6가 `repair_requests`의 아래 8개 열만 `mro_business_reader`에 연다.
+- business 요청 인증: business-mcp도 Backend가 서명한 토큰(aud `mro-business`, `BUSINESS_JWT_SECRET`)을 검증하고,
+  도구는 토큰의 `request_id`와 같은 접수 건만 읽는다. 다르면 `FORBIDDEN`.
+- 동일 실행 컨텍스트: Backend가 실행마다 `run_id`를 만들어 `rag_request_contexts`(context_version 1)를 등록하고,
+  같은 `run_id`·`request_id`·`sub`(신고자)·`tenant_id`(항공사)로 두 토큰을 서명해 AMQP 헤더
+  `x-mro-business-token`·`x-mro-rag-token`으로 보낸다. B01도 context_version 1을 돌려준다.
+- 시연 검색 범위(C02): Backend 컨텍스트는 `operator_code`를 비워 두고 기종(`model_key`)만 고정한다.
+  rag-mcp는 운항사가 없는 컨텍스트에서 운항사 필터를 적용하지 않는다(`operator_filter_applied=false`).
+  KAL/AAR/JNA를 SDR 운항사에 대응시키지 않는다. 항공사×모델 고정 규칙으로 바꾸려면 운항사 매핑을 정한 뒤
+  Backend가 `operator_code`를 채우면 된다.
+
+## 전체 통합 전에 남았던 조건 (기록)
 
 1. **업무 조회 권한:** Backend의 후속 Flyway에서 `mro_business_reader`가 B01/B02/B03의
    요청 확인에 필요한 `repair_requests` 열을 읽을 수 있어야 한다.

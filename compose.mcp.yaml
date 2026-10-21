@@ -10,6 +10,7 @@ services:
       BUSINESS_DATABASE_URL: ${BUSINESS_DATABASE_URL:?Set the mro_business_reader URL in .env.mcp}
       BUSINESS_ALLOWED_HOSTS: 127.0.0.1:*,localhost:*,business-mcp:*
       BUSINESS_SOURCE_VERSION: ${BUSINESS_SOURCE_VERSION:-backend-seed}
+      BUSINESS_JWT_SECRET: ${BUSINESS_JWT_SECRET:?Set the backend-compatible signing secret (mro.mcp.business-jwt-secret)}
     ports:
       - "127.0.0.1:8101:8101"
     networks:
@@ -22,7 +23,7 @@ services:
       dockerfile: docker/rag-mcp.Dockerfile
     environment:
       RAG_DATABASE_URL: ${RAG_DATABASE_URL:?Set the mro_reader URL in .env.mcp}
-      RAG_JWT_SECRET: ${RAG_JWT_SECRET:?Set the backend-compatible signing secret}
+      RAG_JWT_SECRET: ${RAG_JWT_SECRET:?Set the backend-compatible signing secret (mro.mcp.rag-jwt-secret)}
       RAG_CURSOR_SECRET: ${RAG_CURSOR_SECRET:?Set a separate cursor secret}
       RAG_ALLOWED_HOSTS: 127.0.0.1:*,localhost:*,rag-mcp:*
       RAG_PRELOAD_ENCODER: "true"

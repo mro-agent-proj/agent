@@ -68,11 +68,26 @@ async def test_jasc_null_and_invalid_and_global_scope(setup_db):
     assert bad["error"]["code"] == "INVALID_JASC"
     missing = await svc.invoke("search_sdr_cases", dict(args, query="wheel"), claims)
     assert missing["status"] == "NEEDS_INPUT"
-    assert missing["missing_fields"] == ["operator_code", "model_key"]
+    assert missing["missing_fields"] == ["model_key"]
     # The resolved scope travels with the failure so the agent sees what was (not) applied.
     assert missing["applied_scope"]["model_filter_applied"] is True and missing["snapshot_ids"]
     neither = await svc.invoke("search_jasc_codes", dict(args), claims)
     assert neither["error"]["code"] == "INVALID_ARGUMENT"
+
+
+async def test_context_without_operator_pins_model_only(setup_db):
+    """Demo policy (team C02): backend contexts carry no operator, so every operator of the model is in scope."""
+    owner, _, svc, rid, _ = setup_db
+    claims, args = await make_context(owner, rid, operator=None)
+    result = await svc.invoke("search_sdr_cases", dict(args, query="wheel"), claims)
+    assert result["status"] == "OK"
+    assert result["counts"]["scope_count"] == 3
+    assert {item["operator_code"] for item in result["items"]} == {"TESTA", "OTHER"}
+    assert result["applied_scope"]["operator_filter_applied"] is False
+    assert result["applied_scope"]["model_filter_applied"] is True
+    other_model, a2 = await make_context(owner, rid, operator=None, model="A321211")
+    none = await svc.invoke("search_sdr_cases", dict(a2, query="wheel"), other_model)
+    assert none["status"] == "NO_DATA"
 
 
 async def test_scope_cursor_and_evidence_roundtrip(setup_db):

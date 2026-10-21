@@ -71,16 +71,17 @@ class RagSearch:
                 out["applied_scope"] = {
                     "operator_code": ctx["operator_code"],
                     "model_key": ctx["model_key"],
-                    "operator_filter_applied": scoped,
+                    # Demo policy (team C02): a context without operator pins the model only.
+                    "operator_filter_applied": scoped and ctx["operator_code"] is not None,
                     "model_filter_applied": scoped,
                     "locked_filters": ctx["locked_filters"],
                 }
-                if scoped and (not ctx["operator_code"] or not ctx["model_key"]):
+                if scoped and not ctx["model_key"]:
                     raise ToolFailure(
                         "MISSING_SCOPE",
-                        "Verified operator/model mapping is required",
+                        "Verified model mapping is required",
                         status="NEEDS_INPUT",
-                        missing=[k for k in ("operator_code", "model_key") if not ctx[k]],
+                        missing=["model_key"],
                     )
                 await self.validate_codes(conn, ctx, args)
                 if name == "search_jasc_codes":
@@ -173,11 +174,9 @@ class RagSearch:
                 )
 
     def scope(self, ctx, locked=True):
-        conditions = [
-            db.sdr.c.release_id == ctx["release_id"],
-            db.sdr.c.operator_code == ctx["operator_code"],
-            db.sdr.c.model_key == ctx["model_key"],
-        ]
+        conditions = [db.sdr.c.release_id == ctx["release_id"], db.sdr.c.model_key == ctx["model_key"]]
+        if ctx["operator_code"] is not None:
+            conditions.append(db.sdr.c.operator_code == ctx["operator_code"])
         if locked:
             f = ctx["locked_filters"]
             if f.get("jasc_codes"):

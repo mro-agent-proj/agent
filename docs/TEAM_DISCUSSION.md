@@ -4,10 +4,10 @@
 
 | 우선순위 | 항목 | 현재 상태와 필요한 결정 | 담당 |
 |---|---|---|---|
-| 1 · C01 | MCP 인증·실행 컨텍스트 | PDF 접속표는 인증 없음, 마지막 절은 방식 미정. 현재 서버는 JWT/컨텍스트 필수이므로 그대로 연결하면 실패. 권한·조건 버전·스냅샷을 유지할 전달 방식 확정 | 세환·유빈·영호, 클라이언트 나현 |
-| 2 · C02 | 시연 검색 범위 | KAL/AAR/JNA와 SDR 운항사 불일치. 모델만 검색하는 시연안은 Google 항공사×모델 고정 규칙과 다름. 필터를 바꾸기 전에 명세와 시연 정책 합의 | 세환·나현·영호 |
-| 3 · C03 | 근거 검증 실패 사유 | 새 규약은 AI가 COMPLETED 전에 B02/R05 검증. Backend는 HUMAN_REVIEW/VALIDATION_FAILED를 AGENT_NEEDS_HUMAN으로 변환하므로 사유 처리 수정 PR 필요 | 영호, AI 실행기 팀 |
-| 4 · C04 | business-mcp 권한 | B01 접수·B02 배정 이력에 필요한 repair_requests/assignments 권한 없음. 필요한 열/뷰와 권한을 다음 Flyway PR로 추가 | 나현·영호 |
+| 1 · C01 ✅ | MCP 인증·실행 컨텍스트 (2026-10-21 반영: Backend가 실행별 컨텍스트 등록·토큰 2개를 AMQP 헤더로 전달, business-mcp도 토큰 검증) | PDF 접속표는 인증 없음, 마지막 절은 방식 미정. 현재 서버는 JWT/컨텍스트 필수이므로 그대로 연결하면 실패. 권한·조건 버전·스냅샷을 유지할 전달 방식 확정 | 세환·유빈·영호, 클라이언트 나현 |
+| 2 · C02 ✅ | 시연 검색 범위 (2026-10-21 반영: 운항사 없이 기종만 고정하는 시연안) | KAL/AAR/JNA와 SDR 운항사 불일치. 모델만 검색하는 시연안은 Google 항공사×모델 고정 규칙과 다름. 필터를 바꾸기 전에 명세와 시연 정책 합의 | 세환·나현·영호 |
+| 3 · C03 ✅ | 근거 검증 실패 사유 (2026-10-21 반영: Backend가 VALIDATION_FAILED를 그대로 저장) | 새 규약은 AI가 COMPLETED 전에 B02/R05 검증. Backend는 HUMAN_REVIEW/VALIDATION_FAILED를 AGENT_NEEDS_HUMAN으로 변환하므로 사유 처리 수정 PR 필요 | 영호, AI 실행기 팀 |
+| 4 · C04 ✅ | business-mcp 권한 (2026-10-21 반영: Backend V6, repair_requests 8개 열. assignments는 현재 도구가 쓰지 않아 제외) | B01 접수·B02 배정 이력에 필요한 repair_requests/assignments 권한 없음. 필요한 열/뷰와 권한을 다음 Flyway PR로 추가 | 나현·영호 |
 
 이미 맞춰진 항목은 pgvector 이미지, V3 RAG 구조, V4 RAG 조회 계정, R01/R02/R03/R05 명칭·반환 형식, EV-SDR/EV-AMM 근거 ID와 그룹 중복 제외입니다. 초기 덤프 복원 스크립트도 Backend에 반영됐습니다. **실제 공유 DB의 덤프 복원 여부는 별도 확인**해야 합니다.
 

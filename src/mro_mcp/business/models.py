@@ -57,7 +57,7 @@ class HistoryItem(Model):
 
 class Department(Model):
     department_id: str = Field(
-        description="부서 코드. 배정 제안에는 이 값만 쓴다 (AVI·ELE·ENG·HYD·SYS·STR·CAB)"
+        description="부서 코드. 배정 제안에는 search_departments가 돌려준 이 값만 쓴다 (예: HYD, FCS)"
     )
     name: str
     responsibilities: list[str] = Field(description="담당 ATA 장 (예: ATA 29)")

@@ -16,6 +16,7 @@ from ..common.app import McpServer
 from ..common.db import is_permission_denied
 from ..common.errors import ToolFailure
 from ..common.models import AppliedScope, Counts, JascCode, Locator, LockedFilters
+from .auth import authorize
 from .models import (
     AircraftRef,
     Department,
@@ -144,6 +145,7 @@ def register(mcp: McpServer, source_version: str):
         annotations=READ_ONLY,
     )
     async def get_request_context(request_id: RequestId) -> RequestContextResponse:
+        authorize(request_id)
         async with db.read() as conn:
             request = await load_request(conn, request_id)
             aircraft = (
@@ -165,7 +167,8 @@ def register(mcp: McpServer, source_version: str):
             if not aircraft.active:
                 missing.append("aircraft_active")
         warnings = [
-            "operator_code is null: SDR operator mapping for KAL/AAR/JNA is undecided (team v0.3 section 7)",
+            "operator_code is null: search scope is pinned by model only (demo policy, team C02); "
+            "KAL/AAR/JNA are not SDR operators",
             "reporter_role is not recorded by the backend; reported as other",
         ]
         if missing:
@@ -220,6 +223,7 @@ def register(mcp: McpServer, source_version: str):
             str | None, Field(min_length=1, max_length=4096, description="이전 응답의 next_cursor")
         ] = None,
     ) -> HistoryResponse:
+        authorize(request_id)
         check_context_version(context_version)
         filter_key = history_filter_key(request_id, occurred_from, occurred_to, query)
         async with db.read() as conn:
@@ -297,6 +301,7 @@ def register(mcp: McpServer, source_version: str):
         ] = [],  # noqa: B006 - pydantic copies defaults
         limit: Annotated[int, Field(ge=1, le=20, description="반환 상한")] = 5,
     ) -> DepartmentResponse:
+        authorize(request_id)
         check_context_version(context_version)
         async with db.read() as conn:
             await load_request(conn, request_id)

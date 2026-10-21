@@ -11,7 +11,7 @@ AUDIENCE = "mro-rag"
 ISSUER = "mro-backend"
 
 
-def issue_token(secret, *, subject_id, tenant_id, run_id, request_id, context_version, seconds=600):
+def issue_token(secret, *, subject_id, tenant_id, run_id, request_id, context_version, seconds=600, audience=AUDIENCE):
     now = datetime.now(UTC)
     return jwt.encode(
         {
@@ -23,19 +23,19 @@ def issue_token(secret, *, subject_id, tenant_id, run_id, request_id, context_ve
             "iat": now,
             "exp": now + timedelta(seconds=seconds),
             "iss": ISSUER,
-            "aud": AUDIENCE,
+            "aud": audience,
         },
         secret,
         algorithm="HS256",
     )
 
 
-def verify_token(secret, token):
+def verify_token(secret, token, audience=AUDIENCE):
     claims = jwt.decode(
         token,
         secret,
         algorithms=["HS256"],
-        audience=AUDIENCE,
+        audience=audience,
         issuer=ISSUER,
         options={"require": ["sub", "tenant_id", "run_id", "request_id", "context_version", "iat", "exp"]},
     )
