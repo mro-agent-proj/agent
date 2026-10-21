@@ -1,12 +1,13 @@
 """FastMCP with spec-shaped errors: every tool failure becomes a response envelope with isError."""
 
+import inspect
 import json
 import logging
 import time
 from contextlib import asynccontextmanager
 from typing import get_type_hints
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
@@ -27,9 +28,22 @@ def describe_validation(error: ValidationError) -> str:
 
 
 class McpServer(FastMCP):
-    """Streamable HTTP, stateless, JSON responses. Tools return a ResponseBase model or raise ToolFailure."""
+    """Streamable HTTP, stateless, JSON responses. Tools return a ResponseBase model or raise ToolFailure.
 
-    def __init__(self, name, *, database: ReadOnlyDatabase, host, port, allowed_hosts, instructions=None):
+    http_middleware: (ASGI middleware class, kwargs) pairs applied around /mcp and /health, outermost first.
+    """
+
+    def __init__(
+        self,
+        name,
+        *,
+        database: ReadOnlyDatabase,
+        host,
+        port,
+        allowed_hosts,
+        instructions=None,
+        http_middleware=(),
+    ):
         super().__init__(
             name,
             instructions=instructions,
@@ -40,14 +54,20 @@ class McpServer(FastMCP):
             transport_security=TransportSecuritySettings(allowed_hosts=list(allowed_hosts)),
         )
         self.database = database
+        self.http_middleware = list(http_middleware)
         self._responses: dict[str, type[ResponseBase]] = {}
+        self._parameters: dict[str, set[str]] = {}
         self.custom_route("/health", methods=["GET"])(self._health)
 
     def add_tool(self, fn, name=None, **kwargs):
         response_cls = get_type_hints(fn).get("return")
         if not (isinstance(response_cls, type) and issubclass(response_cls, ResponseBase)):
             raise TypeError(f"Tool {fn.__name__} must be annotated to return a ResponseBase model")
-        self._responses[name or fn.__name__] = response_cls
+        tool_name = name or fn.__name__
+        self._responses[tool_name] = response_cls
+        self._parameters[tool_name] = {
+            p.name for p in inspect.signature(fn).parameters.values() if p.annotation is not Context
+        }
         super().add_tool(fn, name=name, **kwargs)
 
     async def call_tool(self, name, arguments):
@@ -55,23 +75,33 @@ class McpServer(FastMCP):
         if response_cls is None:
             return await super().call_tool(name, arguments)
         started = time.monotonic()
-        try:
-            content, structured = await super().call_tool(name, arguments)
-            self._log(name, structured, started)
-            return content, structured
-        except ToolError as exc:
-            cause = exc.__cause__
-            if isinstance(cause, ToolFailure):
-                failure = cause
-            elif isinstance(cause, ValidationError):
-                failure = ToolFailure("INVALID_ARGUMENT", describe_validation(cause))
-            else:
-                failure = ToolFailure(
-                    "INTERNAL_ERROR", "Lookup failed; use trace_id to investigate", retryable=True
-                )
-        request_id = arguments.get("request_id") if isinstance(arguments.get("request_id"), str) else None
-        payload = failure_response(response_cls, failure, request_id=request_id).model_dump(mode="json")
-        if failure.code == "INTERNAL_ERROR":
+        arguments = arguments or {}
+        cause = None
+        # FastMCP ignores unknown arguments; the spec rejects them (additionalProperties: false) so an
+        # agent cannot believe it widened or changed the scope (e.g. by passing operator_code).
+        unknown = sorted(set(arguments) - self._parameters[name])
+        if unknown:
+            failure = ToolFailure("INVALID_ARGUMENT", f"Unknown arguments: {', '.join(unknown)}")
+        else:
+            try:
+                content, structured = await super().call_tool(name, arguments)
+                self._log(name, structured, started)
+                return content, structured
+            except ToolError as exc:
+                cause = exc.__cause__
+                if isinstance(cause, ToolFailure):
+                    failure = cause
+                elif isinstance(cause, ValidationError) and cause.title == f"{name}Arguments":
+                    failure = ToolFailure("INVALID_ARGUMENT", describe_validation(cause))
+                elif isinstance(cause, ValidationError):
+                    # A response model rejected the tool's own data: fail closed without details.
+                    failure = ToolFailure("OUTPUT_CONTRACT_ERROR", "Response contract validation failed")
+                else:
+                    failure = ToolFailure(
+                        "INTERNAL_ERROR", "Lookup failed; use trace_id to investigate", retryable=True
+                    )
+        payload = failure_response(response_cls, failure, arguments).model_dump(mode="json")
+        if failure.code in {"INTERNAL_ERROR", "OUTPUT_CONTRACT_ERROR"}:
             LOG.error("Tool failure tool=%s trace=%s", name, payload["trace_id"], exc_info=cause)
         self._log(name, payload, started)
         return CallToolResult(
@@ -114,4 +144,7 @@ class McpServer(FastMCP):
                 await self.database.shutdown()
 
         app.router.lifespan_context = lifespan
+        # add_middleware wraps outward, so add innermost first.
+        for middleware, options in reversed(self.http_middleware):
+            app.add_middleware(middleware, **options)
         return app

@@ -5,18 +5,27 @@ from conftest import FixedEncoder, make_context
 from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from mro_mcp.rag.server import create_server
 from mro_rag import db
-from mro_rag.contracts import TOOLS
 from mro_rag.embedding import build_embeddings
 from mro_rag.ingest import ingest, load_package
 
 
-def test_catalog_readonly_and_schema_sync():
-    assert set(TOOLS) == {"search_jasc_codes", "search_sdr_cases", "search_amm_references", "get_evidence"}
-    assert all(t["annotations"]["readOnlyHint"] for t in TOOLS.values())
+async def test_tools_are_read_only_and_named_as_spec():
+    server = create_server(
+        database_url="postgresql+asyncpg://unused@127.0.0.1:1/unused",
+        jwt_secret="jwt-test-secret-" * 3,
+        cursor_secret="cursor-test-secret-" * 3,
+    )
+    tools = {t.name: t for t in await server.list_tools()}
+    assert set(tools) == {"search_jasc_codes", "search_sdr_cases", "search_amm_references", "get_evidence"}
+    assert all(t.annotations.readOnlyHint for t in tools.values())
     with open("docs/spec-v1/mcp-tool-contracts.json") as f:
         documented = {t["mcp"]["name"]: t["mcp"] for t in json.load(f)["tools"]}
-    assert all(value == documented[key] for key, value in TOOLS.items())
+    for name, tool in tools.items():
+        assert tool.title == documented[name]["title"]
+        assert set(tool.inputSchema["properties"]) == set(documented[name]["inputSchema"]["properties"])
+        assert set(tool.inputSchema.get("required", [])) == set(documented[name]["inputSchema"]["required"])
 
 
 def test_source_tampering_rejected(package):
@@ -59,6 +68,11 @@ async def test_jasc_null_and_invalid_and_global_scope(setup_db):
     assert bad["error"]["code"] == "INVALID_JASC"
     missing = await svc.invoke("search_sdr_cases", dict(args, query="wheel"), claims)
     assert missing["status"] == "NEEDS_INPUT"
+    assert missing["missing_fields"] == ["operator_code", "model_key"]
+    # The resolved scope travels with the failure so the agent sees what was (not) applied.
+    assert missing["applied_scope"]["model_filter_applied"] is True and missing["snapshot_ids"]
+    neither = await svc.invoke("search_jasc_codes", dict(args), claims)
+    assert neither["error"]["code"] == "INVALID_ARGUMENT"
 
 
 async def test_scope_cursor_and_evidence_roundtrip(setup_db):

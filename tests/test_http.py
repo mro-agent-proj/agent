@@ -58,7 +58,7 @@ async def test_streamable_http_tool_contract_and_authorization(setup_db, tmp_pat
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "mro_rag.server:create_app",
+                "mro_mcp.rag.server:create_app",
                 "--factory",
                 "--host",
                 "127.0.0.1",
@@ -98,7 +98,7 @@ async def test_streamable_http_tool_contract_and_authorization(setup_db, tmp_pat
             bad = await session.call_tool(
                 "search_sdr_cases", dict(args, query="wheel", operator_code="OTHER")
             )
-            assert bad.isError and bad.structuredContent["error"]["code"] == "INVALID_INPUT"
+            assert bad.isError and bad.structuredContent["error"]["code"] == "INVALID_ARGUMENT"
             wrong = await session.call_tool(
                 "search_jasc_codes", dict(args, request_id="someone-else", codes=["3210"])
             )

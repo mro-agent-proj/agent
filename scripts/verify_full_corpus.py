@@ -9,16 +9,24 @@ from uuid import uuid4
 
 from sqlalchemy import func, select, text
 
+from mro_mcp.rag.local import LocalCaller
+from mro_mcp.rag.server import create_server
 from mro_rag import db
 from mro_rag.context import publish_context
 from mro_rag.embedding import CONFIG, LocalEncoder
-from mro_rag.service import RetrievalService
 
 
 async def main():
-    owner, reader = db.engine(os.environ["DATABASE_URL"]), db.engine(os.environ["RAG_DATABASE_URL"])
+    owner = db.engine(os.environ["DATABASE_URL"])
     encoder = LocalEncoder()
-    svc = RetrievalService(reader, "local-verification-cursor-secret-" * 2, encoder)
+    server = create_server(
+        database_url=os.environ["RAG_DATABASE_URL"],
+        jwt_secret="local-verification-jwt-secret-" * 2,
+        cursor_secret="local-verification-cursor-secret-" * 2,
+        encoder=encoder,
+    )
+    svc = LocalCaller(server)
+    await svc.__aenter__()
     run = "verification-" + uuid4().hex
     try:
         async with owner.begin() as conn:
@@ -137,7 +145,7 @@ async def main():
         async with owner.begin() as conn:
             await conn.execute(db.contexts.update().where(db.contexts.c.run_id == run).values(active=False))
         await owner.dispose()
-        await reader.dispose()
+        await svc.__aexit__()
 
 
 if __name__ == "__main__":
