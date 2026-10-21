@@ -1,0 +1,34 @@
+name: PostgreSQL and MCP tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.2-pg16
+        env:
+          POSTGRES_USER: mro_owner
+          POSTGRES_PASSWORD: local-dev-only
+          POSTGRES_DB: mro_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U mro_owner -d mro_test'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1:5432/mro_test
+      TEST_DATABASE_URL: postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1:5432/mro_test
+      TEST_RAG_DATABASE_URL: postgresql+asyncpg://mro_reader:local-reader-only@127.0.0.1:5432/mro_test
+      PGPASSWORD: local-dev-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run alembic upgrade head
+      - run: psql -h 127.0.0.1 -U mro_owner -d mro_test -v ON_ERROR_STOP=1 -f scripts/create_reader.sql
+      - run: make lint
+      - run: make test

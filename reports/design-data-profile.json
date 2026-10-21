@@ -1,0 +1,1045 @@
+{
+  "scope": "Design-time local source inspection; not PostgreSQL or retrieval-quality validation",
+  "source_snapshot_id": "SDR-SNAPSHOT-b704d96f669cd3da",
+  "profiles": {
+    "sdr": {
+      "path": "runtime/sdr_cases.jsonl",
+      "sha256": "b2a42369a8121b876d44e2e1e83a09f0cdf2e272c25d7ab6eca6b7ed9fed9503",
+      "count": 71741,
+      "fields": {
+        "aircraft_serial_raw": {
+          "missing": 0,
+          "null": 13,
+          "types": {
+            "str": 71728,
+            "NoneType": 13
+          }
+        },
+        "case_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "component": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "dict": 71741
+          }
+        },
+        "difficulty_date": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "difficulty_date_raw": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "evidence_group_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "evidence_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "how_discovered_code": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "how_discovered_description": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "locator": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "dict": 71741
+          }
+        },
+        "make_raw": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "model_catalog_match": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "bool": 71741
+          }
+        },
+        "model_certification_verified": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "bool": 71741
+          }
+        },
+        "model_family": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "model_granularity": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "model_key": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "model_raw": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "narrative_raw": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "operator_code": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "operator_control_number": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "part": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "dict": 71741
+          }
+        },
+        "provenance": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "quality_flags": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 71741
+          }
+        },
+        "quote": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "registry_n_number_raw": {
+          "missing": 0,
+          "null": 9,
+          "types": {
+            "str": 71732,
+            "NoneType": 9
+          }
+        },
+        "reported_action_candidates": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 71741
+          }
+        },
+        "reported_jasc": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "reported_outcome_candidates": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 71741
+          }
+        },
+        "search_eligible": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "bool": 71741
+          }
+        },
+        "segmentation_method": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "source_file": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "source_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "source_record_no": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 71741
+          }
+        },
+        "source_type": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "source_version": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "split": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "split_group_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "stage_of_operation_code": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "stage_of_operation_description": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "submission_date": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 71741
+          }
+        },
+        "submitter_code": {
+          "missing": 0,
+          "null": 28,
+          "types": {
+            "str": 71713,
+            "NoneType": 28
+          }
+        },
+        "symptom_candidate": {
+          "missing": 0,
+          "null": 67,
+          "types": {
+            "str": 71674,
+            "NoneType": 67
+          }
+        }
+      }
+    },
+    "amm": {
+      "path": "runtime/amm_references.jsonl",
+      "sha256": "9154f99f16caf37dd89baf0355309da9b4f17cdf1cd87dd57ff5b2ae95a60c6b",
+      "count": 35396,
+      "fields": {
+        "action_end": {
+          "missing": 0,
+          "null": 15739,
+          "types": {
+            "NoneType": 15739,
+            "int": 19657
+          }
+        },
+        "action_start": {
+          "missing": 0,
+          "null": 15739,
+          "types": {
+            "NoneType": 15739,
+            "int": 19657
+          }
+        },
+        "applicability_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "cited_amm_ref_normalized": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "cited_amm_ref_raw": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "difficulty_date": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "distilled_record_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "evidence_group_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "evidence_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "extraction_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "extraction_version": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "locator": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "dict": 35396
+          }
+        },
+        "model_key": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "operator_code": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "outcome": {
+          "missing": 0,
+          "null": 32669,
+          "types": {
+            "str": 2727,
+            "NoneType": 32669
+          }
+        },
+        "parent_source_ids": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 35396
+          }
+        },
+        "provenance": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "quote": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "quote_end": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 35396
+          }
+        },
+        "quote_start": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 35396
+          }
+        },
+        "reference_end": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 35396
+          }
+        },
+        "reference_level": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "reference_start": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 35396
+          }
+        },
+        "relationship_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "reported_action": {
+          "missing": 0,
+          "null": 15739,
+          "types": {
+            "NoneType": 15739,
+            "str": 19657
+          }
+        },
+        "reported_jasc": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "search_eligible": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "bool": 35396
+          }
+        },
+        "semantic_review_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "source_case_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "source_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "source_type": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "source_version": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "split": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "split_group_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        },
+        "symptom": {
+          "missing": 0,
+          "null": 76,
+          "types": {
+            "str": 35320,
+            "NoneType": 76
+          }
+        },
+        "symptom_relationship_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 35396
+          }
+        }
+      }
+    },
+    "chunks": {
+      "path": "rag/amm_chunks.jsonl",
+      "sha256": "5fe9d54f201d6b622856663c5591b133d0860417e968b33c2088d65f0d1135de",
+      "count": 31678,
+      "fields": {
+        "applicability_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "chunk_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "content_hash": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "context_symptom": {
+          "missing": 0,
+          "null": 64,
+          "types": {
+            "str": 31614,
+            "NoneType": 64
+          }
+        },
+        "difficulty_date": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "embedding": {
+          "missing": 0,
+          "null": 31678,
+          "types": {
+            "NoneType": 31678
+          }
+        },
+        "embedding_model_version": {
+          "missing": 0,
+          "null": 31678,
+          "types": {
+            "NoneType": 31678
+          }
+        },
+        "embedding_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "embedding_text": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "end_offset": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 31678
+          }
+        },
+        "evidence_group_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "linked_reference_ids": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 31678
+          }
+        },
+        "model_key": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "operator_code": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "reference_numbers": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 31678
+          }
+        },
+        "reference_quality": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 31678
+          }
+        },
+        "relationship_statuses": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "list": 31678
+          }
+        },
+        "reported_jasc": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "semantic_review_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "source_case_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "source_version": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "split_group_id": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        },
+        "start_offset": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "int": 31678
+          }
+        },
+        "text": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 31678
+          }
+        }
+      }
+    },
+    "jasc": {
+      "path": "reference/jasc_codes.jsonl",
+      "sha256": "9475f0d629d71695af81d2d819aa59b8ce6fe8617e441648268ab19405da6948",
+      "count": 548,
+      "fields": {
+        "code": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "codebook_version": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "definition": {
+          "missing": 0,
+          "null": 61,
+          "types": {
+            "str": 487,
+            "NoneType": 61
+          }
+        },
+        "definition_source_file": {
+          "missing": 0,
+          "null": 61,
+          "types": {
+            "str": 487,
+            "NoneType": 61
+          }
+        },
+        "definition_source_url": {
+          "missing": 0,
+          "null": 61,
+          "types": {
+            "str": 487,
+            "NoneType": 61
+          }
+        },
+        "provenance": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "reference_coverage": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "source_url": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "title": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "title_source_file": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        },
+        "title_status": {
+          "missing": 0,
+          "null": 0,
+          "types": {
+            "str": 548
+          }
+        }
+      }
+    }
+  },
+  "raw_record_count": 84989,
+  "raw_field_count": 76,
+  "amm_action_text_forms": {
+    "null": 15739,
+    "boundary_whitespace_only": 19621,
+    "exact": 36
+  },
+  "raw_file_sha256": "5b047e8e27644405f9ba0008b67c347986c5c4d971bd0d5bcbdafea56037072f",
+  "sqlite_counts": {
+    "sdr_cases": 71741,
+    "amm_references": 35396,
+    "amm_chunks": 31678,
+    "jasc_codes": 548,
+    "evidence": 107137,
+    "aircraft": 203,
+    "aircraft_history": 185,
+    "departments": 192
+  },
+  "evidence_source_counts": {
+    "derived_amm_reference": 35396,
+    "sdr": 71741
+  },
+  "unique_operator_codes": 24,
+  "unique_model_keys": 38,
+  "scope_pairs": 100,
+  "amm_chunk_reference_links": 35396,
+  "holdout_sdr_count": 7669,
+  "jasc_codebook_versions": {
+    "FAA-lookup-2026-07-09+titles-2008-10-27": 487,
+    "FAA-PDF-2008-10-27": 61
+  },
+  "jasc_unresolved_titles": [
+    "2924"
+  ],
+  "literal_operator_KAL_count": 0,
+  "mapping_note": "Inventories are observations, not verified ICAO/model aliases. Re-running overwrites generated inventories; maintain approved mappings separately.",
+  "checks": [
+    {
+      "name": "sdr_unique_id",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "amm_unique_id",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "chunks_unique_id",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "jasc_unique_id",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "runtime_corpus_only",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "runtime_jasc_exists",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "amm_source_scope_and_group",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "amm_reference_and_quote_offsets",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "amm_range_constraints",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "amm_action_null_range_and_text",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "chunk_source_quote_and_hash",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "chunk_reference_same_source",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "chunk_duplicate_links",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "chunk_source_version_matches_parent",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "embeddings_not_generated",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "submission_timestamp_has_offset",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "holdout_ids_disjoint",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "holdout_groups_disjoint",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "evidence_ids_unique_across_sources",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "evidence_registry_matches_source_and_scope",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "sdr_sqlite_count",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "amm_sqlite_count",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "chunks_sqlite_count",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "jasc_sqlite_count",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "raw_76_columns_same_order",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "runtime_has_preserved_raw",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "runtime_raw_text_and_version_match",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    },
+    {
+      "name": "preserved_package_manifest_hashes",
+      "passed": true,
+      "failure_count": 0,
+      "examples": []
+    }
+  ],
+  "all_passed": true
+}

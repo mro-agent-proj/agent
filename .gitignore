@@ -1,0 +1,30 @@
+# Generated/local data; versioned metadata lives in docs and reports.
+/data/
+/artifacts/
+/backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local credentials and environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+.DS_Store
+*.log
+
+# Separately supplied source documents and local provenance snapshots
+/*.pdf
+/docs/spec-v1/mcp-spec.source.json
+/reports/project-transfer-verification.json
+/reports/source-copy-verification.json
+/dist/
+.ripwire*/

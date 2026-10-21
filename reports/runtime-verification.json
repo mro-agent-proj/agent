@@ -1,0 +1,61 @@
+{
+  "release_key": "REL-c3bab06428c93938342ef46b-postgres-v1",
+  "counts": {
+    "jasc_codes": 548,
+    "sdr_cases": 71741,
+    "amm_references": 35396,
+    "amm_chunks": 31678,
+    "evidence": 107137,
+    "amm_embeddings": 31678
+  },
+  "model": {
+    "model": "intfloat/multilingual-e5-small",
+    "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+    "dimension": 384,
+    "distance": "cosine",
+    "query_prefix": "query: ",
+    "document_prefix": "passage: ",
+    "normalize": true,
+    "window_tokens": 480,
+    "stride_tokens": 448,
+    "window_pooling": "mean_then_normalize",
+    "search_algorithm": "exact",
+    "implementation": "e5-v1"
+  },
+  "scope": {
+    "operator_code": "AALA",
+    "model_key": "A321231",
+    "mapping": "raw-code-verification-only"
+  },
+  "token_window_check": {
+    "unique_inputs": 28862,
+    "windows": 28896,
+    "maximum_tokens": 484,
+    "model_limit": 512
+  },
+  "cases": [
+    {
+      "query": "착륙 장치 바퀴 진동과 타이어 손상",
+      "returned": 3,
+      "seconds": 0.533,
+      "evidence_roundtrip": true,
+      "evidence_ids": [
+        "EV-AMM-1d50dc41804481ecb622",
+        "EV-AMM-3cd24ee4705a88b3e498",
+        "EV-AMM-6a3b4aac727a7c7f7e05"
+      ]
+    },
+    {
+      "query": "hydraulic system fluid leak",
+      "returned": 3,
+      "seconds": 0.239,
+      "evidence_roundtrip": true,
+      "evidence_ids": [
+        "EV-AMM-7f26ad4380e483afc7ee",
+        "EV-AMM-ee5a763f16da2794db95",
+        "EV-AMM-20a4fc76a9d411085a17"
+      ]
+    }
+  ],
+  "limitation": "Integration smoke test, not retrieval relevance or diagnostic accuracy evaluation"
+}

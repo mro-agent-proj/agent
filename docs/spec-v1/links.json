@@ -1,0 +1,8 @@
+{
+  "google_doc": "https://docs.google.com/document/d/1gyMiTHTtQQ329pOZlAJfNGpa3mmcJO0s-gdOF82bCpA",
+  "version": "1.0",
+  "date": "2026-10-21",
+  "source": "separately retained local Google document snapshot",
+  "contracts": "mcp-tool-contracts.json",
+  "implementation_status": "R01_R02_R03_R05_implemented_backend_integration_pending"
+}

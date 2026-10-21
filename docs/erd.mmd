@@ -1,0 +1,116 @@
+erDiagram
+    KNOWLEDGE_RELEASES ||--o{ JASC_CODES : contains
+    KNOWLEDGE_RELEASES ||--o{ SDR_CASES : contains
+    KNOWLEDGE_RELEASES ||--o{ AMM_REFERENCES : contains
+    KNOWLEDGE_RELEASES ||--o{ AMM_CHUNKS : contains
+    KNOWLEDGE_RELEASES ||--o{ EVIDENCE : contains
+    KNOWLEDGE_RELEASES ||--o{ KNOWLEDGE_INDEXES : indexes
+    KNOWLEDGE_RELEASES ||--o{ RAG_AMM_EMBEDDINGS : contains
+    KNOWLEDGE_INDEXES ||--o{ RAG_AMM_EMBEDDINGS : versions
+    AMM_CHUNKS ||--o{ RAG_AMM_EMBEDDINGS : embeds
+    JASC_CODES ||--o{ SDR_CASES : classifies_in_release
+    SDR_CASES ||--o{ AMM_REFERENCES : cites
+    SDR_CASES ||--o{ AMM_CHUNKS : quotes
+    SDR_CASES ||--o{ EVIDENCE : source_of
+    AMM_REFERENCES o|--|| EVIDENCE : optional_reference
+    AMM_CHUNKS ||--|{ AMM_CHUNK_REFERENCES : links
+    AMM_REFERENCES ||--o{ AMM_CHUNK_REFERENCES : links
+    KNOWLEDGE_RELEASES {
+        uuid id PK
+        text release_key UK
+        text source_snapshot_id
+        text transform_version
+        text state
+    }
+    JASC_CODES {
+        uuid id PK
+        uuid release_id FK
+        text code "unique with release_id"
+        text title
+        text definition "nullable"
+        text codebook_version
+    }
+    SDR_CASES {
+        uuid id PK
+        uuid release_id FK
+        text case_id "unique with release_id"
+        text operator_code
+        text model_key
+        text reported_jasc FK
+        date difficulty_date
+        timestamptz submission_at
+        text narrative_raw
+        text evidence_group_id
+        jsonb raw_record
+        jsonb source_payload
+    }
+    AMM_REFERENCES {
+        uuid id PK
+        uuid release_id FK
+        uuid sdr_case_uuid FK
+        text distilled_record_id "unique with release_id"
+        text cited_amm_ref_normalized
+        int reference_start
+        int reference_end
+        text relationship_status
+    }
+    AMM_CHUNKS {
+        uuid id PK
+        uuid release_id FK
+        uuid sdr_case_uuid FK
+        text chunk_id "unique with release_id"
+        text embedding_text
+        text content_hash
+    }
+    AMM_CHUNK_REFERENCES {
+        uuid release_id PK,FK
+        uuid sdr_case_uuid FK
+        uuid chunk_uuid PK,FK
+        uuid reference_uuid PK,FK
+    }
+    EVIDENCE {
+        uuid id PK
+        uuid release_id FK
+        text evidence_id "unique with release_id"
+        uuid sdr_case_uuid FK
+        uuid amm_reference_uuid FK "nullable for SDR"
+        text source_type
+        text source_version
+        jsonb locator
+    }
+    KNOWLEDGE_INDEXES {
+        uuid id PK
+        uuid release_id FK
+        text index_key UK
+        text dataset
+        text method
+        text state
+        jsonb config
+    }
+    RAG_AMM_EMBEDDINGS {
+        uuid id PK
+        uuid release_id FK
+        uuid index_uuid FK "unique with chunk_uuid"
+        uuid chunk_uuid FK
+        text content_hash
+        text embedding_model_version
+        int dimension
+        vector embedding "384 dimensions"
+        timestamptz created_at
+    }
+    KNOWLEDGE_RELEASES ||--o{ RAG_REQUEST_CONTEXTS : pins
+    RAG_REQUEST_CONTEXTS {
+        text run_id PK
+        text request_id
+        int context_version
+        text subject_id
+        text tenant_id
+        text operator_code "nullable until verified"
+        text model_key "nullable until verified"
+        uuid release_id FK
+        jsonb index_ids
+        text mapping_revision
+        jsonb locked_filters
+        boolean active
+        timestamptz expires_at
+    }
