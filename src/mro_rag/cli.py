@@ -36,7 +36,7 @@ def main():
     commands.add_parser("serve")
     args = parser.parse_args()
     if args.command == "serve":
-        from .server import main as serve
+        from mro_mcp.rag.server import main as serve
 
         serve()
     else:

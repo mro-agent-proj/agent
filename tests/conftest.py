@@ -3,17 +3,20 @@
 import hashlib
 import json
 import os
+from importlib.resources import files
 from uuid import uuid4
 
 import numpy as np
 import pytest
 import pytest_asyncio
+from jsonschema import Draft202012Validator, FormatChecker
 from sqlalchemy import select
 
+from mro_mcp.rag.local import LocalCaller
+from mro_mcp.rag.server import create_server
 from mro_rag import db
 from mro_rag.context import publish_context
 from mro_rag.ingest import ingest
-from mro_rag.service import RetrievalService
 
 
 class FixedEncoder:
@@ -200,10 +203,37 @@ async def setup_db(package):
             )
         ).scalar_one()
     reader = db.engine(os.environ["TEST_RAG_DATABASE_URL"])
-    service = RetrievalService(reader, "cursor-test-secret-" * 3, FixedEncoder())
-    yield owner, reader, service, release_id, result["release_key"]
+    server = create_server(
+        database_url=os.environ["TEST_RAG_DATABASE_URL"],
+        jwt_secret="jwt-test-secret-" * 3,
+        cursor_secret="cursor-test-secret-" * 3,
+        encoder=FixedEncoder(),
+    )
+    async with ContractCheckingCaller(server) as service:
+        yield owner, reader, service, release_id, result["release_key"]
     await reader.dispose()
     await owner.dispose()
+
+
+class ContractCheckingCaller(LocalCaller):
+    """Every response must still satisfy the spec v1.0 JSON Schema the Pydantic models replaced."""
+
+    async def invoke(self, name, args, claims):
+        result = await super().invoke(name, args, claims)
+        LEGACY_OUTPUTS[name].validate(result)
+        return result
+
+
+def legacy_outputs():
+    catalog = json.loads(files("mro_rag").joinpath("tool_contracts.json").read_text())
+    return {
+        t["mcp"]["name"]: Draft202012Validator(t["mcp"]["outputSchema"], format_checker=FormatChecker())
+        for t in catalog["tools"]
+        if t["id"] in {"R01", "R02", "R03", "R05"}
+    }
+
+
+LEGACY_OUTPUTS = legacy_outputs()
 
 
 async def make_context(owner, release_id, *, operator="TESTA", model="A320214", filters=None):

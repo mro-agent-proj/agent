@@ -39,7 +39,7 @@ class AppliedScope(Model):
     model_key: str | None = None
     operator_filter_applied: bool = False
     model_filter_applied: bool = False
-    locked_filters: LockedFilters = LockedFilters()
+    locked_filters: LockedFilters = Field(default_factory=LockedFilters)
 
 
 class Locator(Model):
@@ -58,7 +58,7 @@ class ResponseBase(Model):
     trace_id: str = Field(default_factory=lambda: str(uuid4()))
     applied_scope: AppliedScope | None = None
     snapshot_ids: list[str] = []
-    counts: Counts = Counts()
+    counts: Counts = Field(default_factory=Counts)
     next_cursor: str | None = None
     warnings: list[str] = []
     missing_fields: list[str] = []

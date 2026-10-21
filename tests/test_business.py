@@ -104,6 +104,11 @@ def test_cursor_round_trip_and_binding():
             {"request_id": REQUEST_ID, "context_version": 1, "candidate_jasc": ["21"]},
             "INVALID_ARGUMENT",
         ),
+        (
+            "get_aircraft_history",
+            {"request_id": REQUEST_ID, "context_version": 1, "tail_number": "HL7702"},
+            "INVALID_ARGUMENT",
+        ),
     ],
 )
 async def test_input_errors_use_the_spec_envelope(offline_server, name, args, code):

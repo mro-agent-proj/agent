@@ -1,0 +1,154 @@
+"""R01/R02/R03/R05 tool definitions. Inputs are Pydantic-validated; search.py does the work."""
+
+from typing import Annotated, Literal
+
+from mcp.types import ToolAnnotations
+from pydantic import Field, StringConstraints
+
+from ..common.app import McpServer
+from ..common.errors import ToolFailure
+from ..common.models import JascCode
+from .auth import principal
+from .models import AmmResponse, EvidenceResponse, JascResponse, SdrResponse
+from .search import RagSearch
+
+READ_ONLY = ToolAnnotations(readOnlyHint=True)
+
+RequestId = Annotated[
+    str, Field(min_length=1, max_length=200, description="접수 ID. 위임 토큰의 request_id와 같아야 한다")
+]
+ContextVersion = Annotated[int, Field(ge=1, description="get_request_context가 돌려준 context_version")]
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+Cursor = Annotated[str | None, Field(min_length=1, max_length=4096, description="이전 응답의 next_cursor")]
+Limit = Annotated[int, Field(ge=1, le=20, description="반환 상한")]
+SearchMode = Annotated[
+    Literal["exact", "explore"],
+    Field(description="exact: 구절 그대로 검색, explore: 넓게 검색. 둘 다 접수 범위·고정 필터는 유지"),
+]
+CandidateJasc = Annotated[
+    list[JascCode], Field(max_length=10, description="추정 JASC 후보. 순위 가중치일 뿐 필터가 아니다")
+]
+
+
+def provided(**values):
+    """The search layer distinguishes 'not given' from defaults, as the JSON contract did."""
+    return {k: v for k, v in values.items() if v is not None and v != []}
+
+
+def register(mcp: McpServer, search: RagSearch):
+    async def run(name, args):
+        return await search.run(name, args, principal.get())
+
+    @mcp.tool(
+        name="search_jasc_codes",
+        title="자연어 증상에 대응할 수 있는 공식 JASC 코드 후보를 확인한다.",
+        description=(
+            "증상에 맞는 JASC 4자리 코드 후보를 찾거나(query), 코드의 공식 명칭·정의를 확인한다(codes). "
+            "결과는 고장 원인 확정이나 부서 대응표가 아니라 검색 후보다."
+        ),
+        annotations=READ_ONLY,
+    )
+    async def search_jasc_codes(
+        request_id: RequestId,
+        context_version: ContextVersion,
+        query: Annotated[Text | None, Field(description="코드 명칭·정의 영어 질의")] = None,
+        codes: Annotated[
+            list[JascCode] | None, Field(min_length=1, max_length=20, description="정확 조회할 코드")
+        ] = None,
+        limit: Limit = 5,
+    ) -> JascResponse:
+        if query is None and codes is None:
+            raise ToolFailure("INVALID_ARGUMENT", "query or codes is required")
+        args = provided(
+            request_id=request_id, context_version=context_version, query=query, codes=codes, limit=limit
+        )
+        return JascResponse.model_validate(await run("search_jasc_codes", args))
+
+    @mcp.tool(
+        name="search_sdr_cases",
+        title="현재 접수 범위 안에서 유사 증상·부품·조치가 기록된 SDR 사례를 찾는다.",
+        description=(
+            "접수 기종(model_key) 범위에서 비슷한 증상·부품·조치가 기록된 SDR 사례를 영어 전문검색으로 찾는다. "
+            "reported_jasc는 확정 원인이 아니며, 근거로 쓸 때 evidence_id를 ref_id로 인용한다."
+        ),
+        annotations=READ_ONLY,
+    )
+    async def search_sdr_cases(
+        request_id: RequestId,
+        context_version: ContextVersion,
+        query: Annotated[Text, Field(description="증상·부품·위치 영어 질의")],
+        candidate_jasc: CandidateJasc = [],  # noqa: B006 - pydantic copies defaults
+        search_mode: SearchMode = "explore",
+        limit: Limit = 5,
+        cursor: Cursor = None,
+    ) -> SdrResponse:
+        args = provided(
+            request_id=request_id,
+            context_version=context_version,
+            query=query,
+            candidate_jasc=candidate_jasc,
+            search_mode=search_mode,
+            limit=limit,
+            cursor=cursor,
+        )
+        return SdrResponse.model_validate(await run("search_sdr_cases", args))
+
+    @mcp.tool(
+        name="search_amm_references",
+        title="증상과 관련된 과거 AMM 인용 맥락을 찾아 담당 부서에 전달할 참고번호를 제공한다.",
+        description=(
+            "SDR에 인용된 AMM 번호와 그 인용 맥락을 찾는다. query는 한국어·영어 의미 검색, "
+            "amm_reference_exact는 번호 정확 조회. 번호는 실제 매뉴얼 절차의 존재·적용성을 보장하지 않는다."
+        ),
+        annotations=READ_ONLY,
+    )
+    async def search_amm_references(
+        request_id: RequestId,
+        context_version: ContextVersion,
+        query: Annotated[Text | None, Field(description="증상·조치 맥락 질의 (의미 검색)")] = None,
+        amm_reference_exact: Annotated[
+            Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)] | None,
+            Field(description="정확 조회할 AMM 번호 (예: 32-11-00)"),
+        ] = None,
+        candidate_jasc: CandidateJasc = [],  # noqa: B006 - pydantic copies defaults
+        reference_levels: Annotated[
+            list[Literal["chapter_section", "subsection", "task_format"]],
+            Field(max_length=3, description="인용 수준 필터"),
+        ] = [],  # noqa: B006 - pydantic copies defaults
+        search_mode: SearchMode = "explore",
+        limit: Limit = 5,
+        cursor: Cursor = None,
+    ) -> AmmResponse:
+        if query is None and amm_reference_exact is None:
+            raise ToolFailure("INVALID_ARGUMENT", "query or amm_reference_exact is required")
+        args = provided(
+            request_id=request_id,
+            context_version=context_version,
+            query=query,
+            amm_reference_exact=amm_reference_exact,
+            candidate_jasc=candidate_jasc,
+            reference_levels=reference_levels,
+            search_mode=search_mode,
+            limit=limit,
+            cursor=cursor,
+        )
+        return AmmResponse.model_validate(await run("search_amm_references", args))
+
+    @mcp.tool(
+        name="get_evidence",
+        title="검색에서 받은 SDR·AMM 참조·기술자료 근거의 원문 범위를 다시 확인한다.",
+        description=(
+            "R02·R03에서 받은 evidence_id의 원문과 인용 위치를 다시 확인한다. 배정 근거로 인용하기 전에 쓴다. "
+            "수리이력(MH-*)은 business-mcp의 get_aircraft_history로 확인한다."
+        ),
+        annotations=READ_ONLY,
+    )
+    async def get_evidence(
+        request_id: RequestId,
+        context_version: ContextVersion,
+        evidence_id: Annotated[
+            str, Field(min_length=1, max_length=200, description="EV-SDR-* 또는 EV-AMM-*")
+        ],
+    ) -> EvidenceResponse:
+        args = {"request_id": request_id, "context_version": context_version, "evidence_id": evidence_id}
+        return EvidenceResponse.model_validate(await run("get_evidence", args))

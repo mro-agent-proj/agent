@@ -1,30 +1,28 @@
-"""Four read-only tools. Every query is authorized and pinned to an immutable run."""
+"""Search logic for R01/R02/R03/R05. Every query is authorized and pinned to an immutable run.
+
+Moved from mro_rag/service.py: input/output validation and error envelopes now live in common.McpServer;
+queries, scoping, cursors and ranking are unchanged.
+"""
 
 import asyncio
 import base64
 import hashlib
 import hmac
 import json
-import logging
+import re
 import time
 from datetime import UTC, date, datetime
-from uuid import uuid4
 
-from jsonschema import ValidationError
-from sqlalchemy import and_, case, func, select, text
+from sqlalchemy import and_, case, func, select
 
-from . import db
-from .contracts import INPUTS, OUTPUTS
-from .embedding import CONFIG, LocalEncoder
-from .ingest import json_hash
+from mro_rag import db
+from mro_rag.embedding import CONFIG, LocalEncoder
+from mro_rag.ingest import json_hash
 
-LOG = logging.getLogger(__name__)
+from ..common.db import ReadOnlyDatabase
+from ..common.errors import ToolFailure
 
-
-class ToolError(Exception):
-    def __init__(self, code, message, *, status="ERROR", missing=None, retryable=False):
-        self.code, self.message = code, message
-        self.status, self.missing, self.retryable = status, missing or [], retryable
+CARRIED = ("applied_scope", "snapshot_ids", "counts", "warnings")
 
 
 def locator(value):
@@ -34,45 +32,33 @@ def locator(value):
     }
 
 
-def empty_result(name, args):
+def new_result(name, args):
     return {
         "status": "OK",
-        "request_id": args.get("request_id") if isinstance(args.get("request_id"), str) else None,
-        "context_version": args.get("context_version")
-        if type(args.get("context_version")) is int and args["context_version"] > 0
-        else None,
-        "trace_id": str(uuid4()),
+        "request_id": args["request_id"],
+        "context_version": args["context_version"],
         "applied_scope": None,
         "snapshot_ids": [],
         "counts": {"scope_count": None, "eligible_count": None, "returned_count": 0},
         "next_cursor": None,
         "warnings": [],
-        "missing_fields": [],
-        "error": None,
         **({"result": None} if name == "get_evidence" else {"items": []}),
     }
 
 
-class RetrievalService:
-    def __init__(self, engine, cursor_secret, encoder=None):
+class RagSearch:
+    def __init__(self, database: ReadOnlyDatabase, cursor_secret, encoder=None):
         if len(cursor_secret) < 32:
             raise ValueError("Cursor secret must be at least 32 characters")
-        self.engine, self.secret, self.encoder = engine, cursor_secret.encode(), encoder
+        self.database, self.secret, self.encoder = database, cursor_secret.encode(), encoder
         self.encode_lock = asyncio.Lock()
 
-    async def invoke(self, name, args, claims):
-        if name not in INPUTS:
-            raise ToolError("UNKNOWN_TOOL", "Unknown tool")
-        out = empty_result(name, args)
-        try:
-            INPUTS[name].validate(args)
-            for key in ("query", "amm_reference_exact"):
-                if key in args and not args[key].strip():
-                    raise ToolError("INVALID_INPUT", f"{key} must not be blank")
-            async with self.engine.connect() as conn, conn.begin():
-                await conn.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
-                await conn.execute(text("SET LOCAL statement_timeout = '8s'"))
-                ctx = await self.resolve(conn, args, claims)
+    async def run(self, name, args, claims):
+        """Returns the response dict for one tool call; raises ToolFailure for caller-actionable outcomes."""
+        out = new_result(name, args)
+        async with self.database.read() as conn:
+            ctx = await self.resolve(conn, args, claims)
+            try:
                 out["snapshot_ids"] = [ctx["release_key"], *ctx["index_ids"]]
                 scoped = name != "search_jasc_codes"
                 out["applied_scope"] = {
@@ -83,7 +69,7 @@ class RetrievalService:
                     "locked_filters": ctx["locked_filters"],
                 }
                 if scoped and (not ctx["operator_code"] or not ctx["model_key"]):
-                    raise ToolError(
+                    raise ToolFailure(
                         "MISSING_SCOPE",
                         "Verified operator/model mapping is required",
                         status="NEEDS_INPUT",
@@ -98,51 +84,18 @@ class RetrievalService:
                     await self.amm_search(conn, ctx, args, out)
                 else:
                     await self.get_evidence(conn, ctx, args, out)
-        except ValidationError:
-            self.error(out, ToolError("INVALID_INPUT", "Input does not match the tool contract"))
-        except ToolError as exc:
-            self.error(out, exc)
-        except Exception:
-            LOG.exception("Retrieval failure trace=%s", out["trace_id"])
-            self.error(
-                out,
-                ToolError(
-                    "INTERNAL_ERROR", "Retrieval failed; use trace_id for investigation", retryable=True
-                ),
-            )
-        # A projection bug must fail closed without exposing DB/stack details.
-        try:
-            OUTPUTS[name].validate(out)
-        except ValidationError:
-            LOG.exception("Output contract violation trace=%s", out["trace_id"])
-            out = empty_result(name, {})
-            self.error(out, ToolError("OUTPUT_CONTRACT_ERROR", "Response contract validation failed"))
+            except ToolFailure as failure:
+                # Keep the scope that was already resolved so the caller sees what was applied.
+                if not failure.details:
+                    failure.details = {k: out[k] for k in CARRIED}
+                raise
         return out
-
-    @staticmethod
-    def error(out, exc):
-        out.update(
-            status=exc.status,
-            missing_fields=exc.missing,
-            next_cursor=None,
-            error={
-                "code": exc.code,
-                "message": exc.message,
-                "retryable": exc.retryable,
-                "retry_after_ms": None,
-            },
-        )
-        if "items" in out:
-            out["items"] = []
-        else:
-            out["result"] = None
-        out["counts"]["returned_count"] = 0
 
     async def resolve(self, conn, args, claims):
         if not claims or args["request_id"] != claims["request_id"]:
-            raise ToolError("FORBIDDEN", "Request is not authorized")
+            raise ToolFailure("FORBIDDEN", "Request is not authorized")
         if args["context_version"] != claims["context_version"]:
-            raise ToolError("CONTEXT_VERSION_CONFLICT", "Request context version changed")
+            raise ToolFailure("CONTEXT_VERSION_CONFLICT", "Request context version changed")
         row = (
             (
                 await conn.execute(
@@ -158,16 +111,16 @@ class RetrievalService:
             .first()
         )
         if not row or not row["active"] or row["expires_at"] <= datetime.now(UTC):
-            raise ToolError("FORBIDDEN", "Run is unavailable or revoked")
+            raise ToolFailure("FORBIDDEN", "Run is unavailable or revoked")
         if row["context_version"] != args["context_version"]:
-            raise ToolError("CONTEXT_VERSION_CONFLICT", "Request context version changed")
+            raise ToolFailure("CONTEXT_VERSION_CONFLICT", "Request context version changed")
         release = (
             (await conn.execute(select(db.releases).where(db.releases.c.id == row["release_id"])))
             .mappings()
             .first()
         )
         if not release or release["state"] != "READY":
-            raise ToolError("INDEX_VERSION_UNAVAILABLE", "Pinned release is unavailable")
+            raise ToolFailure("INDEX_VERSION_UNAVAILABLE", "Pinned release is unavailable")
         return dict(row, release_key=release["release_key"])
 
     async def ready_index(self, conn, ctx, dataset, method):
@@ -186,9 +139,9 @@ class RetrievalService:
             .all()
         )
         if not rows:
-            raise ToolError("INDEX_NOT_READY", "No pinned index for this search method")
+            raise ToolFailure("INDEX_NOT_READY", "No pinned index for this search method")
         if len(rows) != 1 or rows[0]["state"] != "READY":
-            raise ToolError("INDEX_VERSION_UNAVAILABLE", "Pinned index is unavailable or ambiguous")
+            raise ToolFailure("INDEX_VERSION_UNAVAILABLE", "Pinned index is unavailable or ambiguous")
         return rows[0]
 
     async def validate_codes(self, conn, ctx, args):
@@ -208,7 +161,9 @@ class RetrievalService:
                 ).scalars()
             )
             if existing != codes:
-                raise ToolError("INVALID_JASC", "One or more JASC codes do not exist in the pinned codebook")
+                raise ToolFailure(
+                    "INVALID_JASC", "One or more JASC codes do not exist in the pinned codebook"
+                )
 
     def scope(self, ctx, locked=True):
         conditions = [
@@ -261,12 +216,12 @@ class RetrievalService:
                 raise ValueError()
             return value["offset"]
         except (ValueError, KeyError, TypeError):
-            raise ToolError(
+            raise ToolFailure(
                 "INVALID_CURSOR", "Cursor is invalid, expired, or belongs to another query"
             ) from None
 
     def finish_page(self, name, ctx, args, out, rows, offset):
-        limit = args.get("limit", 5)
+        limit = args["limit"]
         if len(rows) > limit:
             value = {
                 "binding": self.cursor_binding(name, ctx, args),
@@ -295,9 +250,7 @@ class RetrievalService:
             query = query.where(db.jasc.c.search_document.op("@@")(ts)).order_by(
                 func.ts_rank_cd(db.jasc.c.search_document, ts).desc()
             )
-        rows = (
-            (await conn.execute(query.order_by(db.jasc.c.code).limit(args.get("limit", 5)))).mappings().all()
-        )
+        rows = (await conn.execute(query.order_by(db.jasc.c.code).limit(args["limit"]))).mappings().all()
         out["items"] = [
             {k: r[k] for k in ("code", "title", "definition", "source_url", "codebook_version")} for r in rows
         ]
@@ -326,7 +279,7 @@ class RetrievalService:
                     .where(*self.scope(ctx), db.sdr.c.search_document.op("@@")(ts))
                     .order_by(score.desc(), db.sdr.c.case_id)
                     .offset(offset)
-                    .limit(args.get("limit", 5) + 1)
+                    .limit(args["limit"] + 1)
                 )
             )
             .mappings()
@@ -397,15 +350,13 @@ class RetrievalService:
         if args.get("reference_levels"):
             filters.append(db.amm.c.reference_level.in_(args["reference_levels"]))
         if "amm_reference_exact" in args:
-            import re
-
-            number = re.sub(r"\s*[-.\u2013\u2014]\s*", "-", args["amm_reference_exact"].strip()).upper()
+            number = re.sub(r"\s*[-.–—]\s*", "-", args["amm_reference_exact"].strip()).upper()
             filters.append(db.amm.c.cited_amm_ref_normalized == number)
         offset = self.page_offset("search_amm_references", ctx, args)
         if "query" in args:
             index = await self.ready_index(conn, ctx, "derived_amm", "VECTOR")
             if index["config"] != CONFIG:
-                raise ToolError(
+                raise ToolFailure(
                     "INDEX_VERSION_UNAVAILABLE",
                     "Server encoder does not match the pinned embedding configuration",
                 )
@@ -441,7 +392,7 @@ class RetrievalService:
             await self.ready_index(conn, ctx, "derived_amm", "EXACT")
             query = select(db.amm).select_from(source).where(*filters).order_by(db.amm.c.distilled_record_id)
             kind = "exact"
-        rows = (await conn.execute(query.offset(offset).limit(args.get("limit", 5) + 1))).mappings().all()
+        rows = (await conn.execute(query.offset(offset).limit(args["limit"] + 1))).mappings().all()
         selected = self.finish_page("search_amm_references", ctx, args, out, rows, offset)
         for row in selected:
             p = row["source_payload"]
