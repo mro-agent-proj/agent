@@ -1,12 +1,14 @@
+# syntax=docker/dockerfile:1
 # RAG MCP runs separately from the FastAPI AI server.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_DEV=1
 COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --frozen --extra embedding --no-install-project
+# The uv cache lives in a BuildKit cache mount, not in an image layer (otherwise every wheel is stored twice).
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --extra embedding --no-install-project
 COPY src ./src
-RUN uv sync --frozen --extra embedding \
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --extra embedding \
     && mkdir -p /var/cache/mro/huggingface \
     && chown -R 65534:65534 /var/cache/mro
 

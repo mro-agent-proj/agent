@@ -10,13 +10,23 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-embedding = ["sentence-transformers>=3.4,<6"]
+embedding = ["sentence-transformers>=3.4,<6", "torch>=2.6,<3"]
 dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "httpx>=0.28,<1", "ruff>=0.11,<1"]
 
 [project.scripts]
 mro-rag = "mro_rag.cli:main"
 mro-business-mcp = "mro_mcp.business.server:main"
 mro-rag-mcp = "mro_mcp.rag.server:main"
+
+# Query embeddings run on CPU (MRO_EMBED_DEVICE=cpu). On Linux, PyPI's default torch wheel bundles CUDA
+# (~4 GB of nvidia-* packages); take the CPU-only wheel instead. macOS wheels on PyPI are already CPU/MPS.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [build-system]
 requires = ["hatchling"]

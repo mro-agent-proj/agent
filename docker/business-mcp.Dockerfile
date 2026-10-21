@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # business-mcp (B01~B03). Build from the repository root:
 #   docker build -f docker/business-mcp.Dockerfile -t mro-business-mcp .
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -7,10 +8,10 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_DEV=1
 
 # Dependencies first so source edits reuse this layer.
 COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
 
 COPY src ./src
-RUN uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
 
 ENV PATH="/app/.venv/bin:$PATH" \
     BUSINESS_HOST=0.0.0.0 \
