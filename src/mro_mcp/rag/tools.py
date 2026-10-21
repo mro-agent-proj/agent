@@ -44,6 +44,8 @@ def register(mcp: McpServer, search: RagSearch):
         title="자연어 증상에 대응할 수 있는 공식 JASC 코드 후보를 확인한다.",
         description=(
             "증상에 맞는 JASC 4자리 코드 후보를 찾거나(query), 코드의 공식 명칭·정의를 확인한다(codes). "
+            "코드표는 영어다: query는 계통·부품 영어 단어로 쓴다(예: 'brake', 'flap control', 'exit sign light'). "
+            "단어가 하나라도 맞으면 많이 맞는 순으로 돌려준다. 한국어 단어는 검색에 쓰이지 않는다. "
             "결과는 고장 원인 확정이나 부서 대응표가 아니라 검색 후보다."
         ),
         annotations=READ_ONLY,
@@ -51,7 +53,9 @@ def register(mcp: McpServer, search: RagSearch):
     async def search_jasc_codes(
         request_id: RequestId,
         context_version: ContextVersion,
-        query: Annotated[Text | None, Field(description="코드 명칭·정의 영어 질의")] = None,
+        query: Annotated[
+            Text | None, Field(description="코드 명칭·정의 영어 질의 (예: 'brake', 'flap control')")
+        ] = None,
         codes: Annotated[
             list[JascCode] | None, Field(min_length=1, max_length=20, description="정확 조회할 코드")
         ] = None,
@@ -69,6 +73,10 @@ def register(mcp: McpServer, search: RagSearch):
         title="현재 접수 범위 안에서 유사 증상·부품·조치가 기록된 SDR 사례를 찾는다.",
         description=(
             "접수 기종(model_key) 범위에서 비슷한 증상·부품·조치가 기록된 SDR 사례를 영어 전문검색으로 찾는다. "
+            "SDR 원문은 영어다: query는 부품·현상·경고 메시지의 영어 핵심어 2~5개로 쓴다"
+            "(예: 'brake vibration taxi', 'FLAP SYS 1 FAULT', 'exit sign light chime'). 한국어 단어는 무시된다. "
+            "기본(explore)은 단어가 하나라도 맞으면 많이 맞는 순, search_mode='exact'는 구절 그대로 찾는다. "
+            "NO_MATCH면 동의어로 바꾼다. "
             "reported_jasc는 확정 원인이 아니며, 근거로 쓸 때 evidence_id를 ref_id로 인용한다."
         ),
         annotations=READ_ONLY,
@@ -76,7 +84,9 @@ def register(mcp: McpServer, search: RagSearch):
     async def search_sdr_cases(
         request_id: RequestId,
         context_version: ContextVersion,
-        query: Annotated[Text, Field(description="증상·부품·위치 영어 질의")],
+        query: Annotated[
+            Text, Field(description="증상·부품·경고 메시지 영어 핵심어 2~5개 (예: 'brake vibration taxi')")
+        ],
         candidate_jasc: CandidateJasc = [],  # noqa: B006 - pydantic copies defaults
         search_mode: SearchMode = "explore",
         limit: Limit = 5,
