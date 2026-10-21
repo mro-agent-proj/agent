@@ -4,9 +4,9 @@
 
 ## 준비된 것과 남은 것
 
-- 준비: `data/source/airbus-mcp-data-v1/reference/jasc_codes.jsonl`의 548개 코드, 기존 SQLite 데이터, R01 입출력 명세.
-- 남음: PostgreSQL 적재, 조회 함수, 팀 `rag-mcp` 서버 연결, 실제 DB를 사용하는 통합 검증.
-- PostgreSQL은 팀의 Flyway·별도 RAG 적재 절차에 포함합니다. JASC 테이블과 데이터가 빈 DB 재구축 과정에서도 함께 생성·적재되어야 합니다.
+- 완료: 원본 548개 코드의 PostgreSQL 적재, R01 조회·HTTP MCP 구현과 로컬 DB 검증. Backend V3/V4와 전달 덤프에도 포함됩니다.
+- 남음: Backend 공유 DB의 실제 덤프 복원 확인, 팀이 결정할 인증/컨텍스트 방식과 MCP 클라이언트 연결 후 실제 접수 통합 검증.
+- 공유 DB는 Backend Flyway·덤프 복원 절차로 생성·적재합니다. 우리 ingest 명령을 공유 DB에 직접 실행하지 않습니다.
 - 벡터 DB 선택과 무관하게 JASC 작업은 진행할 수 있습니다. 초기 분류 LLM의 도구 권한이나 전체 업무 상태 흐름은 바꾸지 않습니다.
 
 ## DB 적재

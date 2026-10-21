@@ -1,32 +1,16 @@
-# 팀 문서·실제 Backend 차이와 연결 사항
+# 팀 논의 사항 · 인터페이스 v0.3
 
-기준일 2026-10-21. 사용자 결정에 따라 쓰기 경계는 PDF, 요청 범위·근거 ID는 Google 명세, 환경 연결은 최신 Backend 저장소를 적용했습니다. 공유 문서 수정이나 팀 메시지 발송은 하지 않았습니다.
+기준일 2026-10-21. 최신 PDF 본문 v0.3과 Backend `0fc8caf`를 대조했습니다. 상세 출처·영향·재현은 [규약 검토 보고서](../reports/team-interface-v03-review.md)에 있습니다. 이 문서는 팀 합의나 실제 Slack 발송을 대신하지 않습니다.
 
-## 통합 전에 해결해야 하는 사항
+| 우선순위 | 항목 | 현재 상태와 필요한 결정 | 담당 |
+|---|---|---|---|
+| 1 · C01 | MCP 인증·실행 컨텍스트 | PDF 접속표는 인증 없음, 마지막 절은 방식 미정. 현재 서버는 JWT/컨텍스트 필수이므로 그대로 연결하면 실패. 권한·조건 버전·스냅샷을 유지할 전달 방식 확정 | 세환·유빈·영호, 클라이언트 나현 |
+| 2 · C02 | 시연 검색 범위 | KAL/AAR/JNA와 SDR 운항사 불일치. 모델만 검색하는 시연안은 Google 항공사×모델 고정 규칙과 다름. 필터를 바꾸기 전에 명세와 시연 정책 합의 | 세환·나현·영호 |
+| 3 · C03 | 근거 검증 실패 사유 | 새 규약은 AI가 COMPLETED 전에 B02/R05 검증. Backend는 HUMAN_REVIEW/VALIDATION_FAILED를 AGENT_NEEDS_HUMAN으로 변환하므로 사유 처리 수정 PR 필요 | 영호, AI 실행기 팀 |
+| 4 · C04 | business-mcp 권한 | B01 접수·B02 배정 이력에 필요한 repair_requests/assignments 권한 없음. 필요한 열/뷰와 권한을 다음 Flyway PR로 추가 | 나현·영호 |
 
-| 항목 | 현재 확인한 문제 | 필요한 연결 |
-|---|---|---|
-| 요청 위임·스냅샷 | 실제 RunPayload에는 조건 버전·위임 사용자·색인 고정 정보 없음 | Backend가 검증 컨텍스트 게시 및 위임 JWT 발급. 공개 LLM 입력으로 권한 정보를 받지 않음 |
-| 배정 전 근거 | AgentEventService ASSIGN 경로에 SDR/AMM ID·범위·버전 검증 없음 | Evidence.ref_id=evidence_id 연결, R05로 확인 후 배정. HISTORY는 업무 DB 별도 확인 |
-| 항공사·정확 모델 매핑 | KAL/AAR/JNA와 원본 SDR operator_code 체계가 다름 | 검증 매핑 근거·버전 제공. 미확정은 NEEDS_INPUT, 전체 항공사/모델로 우회 금지 |
+이미 맞춰진 항목은 pgvector 이미지, V3 RAG 구조, V4 RAG 조회 계정, R01/R02/R03/R05 명칭·반환 형식, EV-SDR/EV-AMM 근거 ID와 그룹 중복 제외입니다. 초기 덤프 복원 스크립트도 Backend에 반영됐습니다. **실제 공유 DB의 덤프 복원 여부는 별도 확인**해야 합니다.
 
-수정 위치·필드·통합 순서는 [Backend 안내](../integration/backend/README.md)에 정리했습니다. 위 연결이 끝나기 전에는 실제 접수→자동 배정까지 완료됐다고 볼 수 없습니다.
+RAG 데이터는 기존 검증 전달본을 사용합니다. 우리 저장소에서 공유 DB에 직접 적재하지 않습니다. Backend 담당자가 Flyway 적용 후 `scripts/rag-restore.sh`를 실행합니다. 새 데이터/스키마 변경은 덤프 재전달 또는 Backend Flyway PR로 처리합니다.
 
-## 반영 완료하거나 기록할 차이
-
-| 항목 | 적용 결과 |
-|---|---|
-| MCP 쓰기 충돌 | B04/B05/B06/R06 제외, 업무 변경 Backend·색인 갱신 운영 CLI로 분리 |
-| PDF Alembic vs 실제 Flyway | 공유 DB용 V3 SQL 제공, 로컬 Alembic과 동일성·기존 V1/V2 공존 검증 |
-| pgvector·모델 미정 | 사용자 지시에 따라 로컬 multilingual-e5-small/384차원/cosine 선택 및 전체 구축 |
-| 업무 시드 규모 | 최신 Backend 기체 20대·이력 1,499건·28개 시나리오를 기준으로 반영. 구 패키지 업무 목업 미적재 |
-| 시드 날짜 | 메시지는 2025-10-21~2026-10-20, 실제 CSV는 2024-01-16~2026-10-19. 파일 기준 사용 |
-| 수리이력 JASC | V2 nullable varchar(4), 현재 1,499건 모두 유효 코드. ATA와 분리 |
-| AMM 의미 | 실제 자료는 SDR 인용 참조·맥락, 정비 매뉴얼 본문이나 검증된 적용성 아님 |
-| AMM ID | 참조번호는 여러 원본에 반복. EV-AMM-*를 근거 키로 보존하고 R05 원문 일치 검증 |
-| SDR 제출일 | 원문 timestamp·UTC 시점·원문 날짜를 DB에 함께 보존, R02는 원문 날짜 |
-| 조치 오프셋 | 원본 추출기는 action만 strip 적용. 오프셋을 바꾸지 않고 동일 추출 규칙으로 검증 |
-| JASC 결측 | 정의 null 61개·2924 명칭 미확인 유지, 응답 warnings |
-| 도구명 | R01/R02/R03/R05를 Google 기준으로 사용, R02 source_locator 적용 |
-
-R04 기술자료·business-mcp·RabbitMQ 실행기·LLM2/3은 이번 구현 범위가 아닙니다. 28개 업무 시나리오는 해당 구성요소가 연결된 뒤 별도로 실행해야 합니다.
+LLM1·라우팅 담당, 5분 처리 한도, R04, 체크포인트 쓰기 역할은 후속 협의 사항입니다. 현재 LLM2/3 보류와 DB·MCP 우선 범위는 유지합니다. 기존 시드 날짜·JASC·AMM 데이터 한계는 [Backend 안내](../integration/backend/README.md)와 [데이터 매핑](DATA_MAPPING.md)에 보존합니다.

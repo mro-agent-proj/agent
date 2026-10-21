@@ -3,14 +3,15 @@ flowchart TD
     VALIDATE["Backend: 필수정보·기체·항공사·모델 검증"]
     RETURN["422 보완 안내: 누락·충돌 항목 / 요청·AI 작업 생성 전 응답"]
     CORRECT["요청자가 보완 후 재접수"]
-    QUEUE["QUEUED: Backend 검증 통과"]
+    QUEUE["QUEUED: Spring 검증 통과 → RabbitMQ 실행 요청"]
     FIRST["CLASSIFYING: LLM 1 초기 분류 / business-mcp"]
     MATCH{"동일 기체 이력과 연결 근거 충분?"}
     INVEST["LLM 2: 조사·판정 / business-mcp + rag-mcp"]
     REVIEW["LLM 3: 검토·배정 / business-mcp + rag-mcp"]
     RESULT{"검토 결과"}
     LIMIT{"재조사 횟수 한도 이내?"}
-    ASSIGN["Backend: 저장된 판단·근거·권한 검증 후 부서 배정"]
+    VERIFY{"AI: B02/R05 근거 검증 통과?"}
+    ASSIGN["AI: COMPLETED 발행 → Spring: 부서 검증·배정"]
     TEAM{"실제 정비팀 응답"}
     ACCEPT["접수 수락 / 정비 완료 아님"]
     HUMAN["사람 검토 인계 / 자동 배정 중지"]
@@ -21,11 +22,13 @@ flowchart TD
     VALIDATE -->|확인됨| QUEUE
     QUEUE --> FIRST
     FIRST --> MATCH
-    MATCH -->|충분| ASSIGN
+    MATCH -->|충분| VERIFY
     MATCH -->|추가 조사| INVEST
     INVEST --> REVIEW
     REVIEW --> RESULT
-    RESULT -->|통과| ASSIGN
+    RESULT -->|통과| VERIFY
+    VERIFY -->|통과| ASSIGN
+    VERIFY -->|실패: VALIDATION_FAILED| HUMAN
     RESULT -->|보완| LIMIT
     LIMIT -->|예| INVEST
     LIMIT -->|아니오| HUMAN

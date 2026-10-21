@@ -1,6 +1,8 @@
 # 로컬 실행 안내
 
-Python 3.12, uv, Docker Compose가 필요합니다. 아래는 독립 로컬 DB용입니다. 팀 공유 DB에는 [Backend Flyway 안내](../integration/backend/README.md)를 사용하며 Alembic을 중복 실행하지 않습니다.
+Python 3.12, uv, Docker Compose가 필요합니다. 아래 적재·마이그레이션 명령은 **격리된 로컬 제작·검증 DB(55432) 전용**입니다. 최신 팀 규약 v0.3에 따라 공유 DB(5432)의 생성·계정·전체 데이터 적재는 Backend가 소유합니다. 공유 DB에는 여기의 Alembic/ingest/embed를 실행하지 않습니다.
+
+팀 연결은 [Backend 안내](../integration/backend/README.md)의 순서를 따릅니다. Backend Compose → Spring(AI_MODE=rabbit, Flyway/업무 시드) → Backend `scripts/rag-restore.sh` → MCP/AI 순서입니다. Spring 기동만으로 RAG 덤프가 자동 복원되지는 않습니다. 현재 JWT/컨텍스트 전달과 시연 검색 범위는 팀 미정(C01/C02)이므로 데이터 복원과 실제 접수 호출 성공을 구분합니다.
 
 ## 환경과 DB
 
@@ -41,7 +43,7 @@ R03의 첫 질의는 모델 로딩 때문에 느릴 수 있습니다. 서비스 
 
 `GET /health`는 DB 연결만 확인합니다. 데이터·색인 준비나 Backend 연결 완료를 뜻하지 않습니다. `/mcp`는 모든 요청에 `Authorization: Bearer <delegated JWT>`를 요구합니다.
 
-Backend가 접수 접근권한과 범위를 확인하고 `rag_request_contexts`에 고정 컨텍스트를 작성한 뒤 토큰을 발급해야 합니다. [통합 안내](../integration/backend/README.md)의 내부 계약을 따릅니다. 개발 테스트에서는 `tests/conftest.py`의 `make_context`와 `tests/test_http.py`의 토큰/SDK 예시를 사용합니다. LLM 도구 입력에 토큰이나 operator 값을 넣지 않습니다.
+현재 구현은 Backend가 접수 접근권한과 범위를 확인하고 `rag_request_contexts`에 고정 컨텍스트를 작성한 뒤 토큰을 발급하는 방식입니다. 최신 PDF에서 이 전달 방식은 미정이므로 [통합 안내](../integration/backend/README.md)의 C01을 먼저 맞춰야 합니다. 개발 테스트에서는 `tests/conftest.py`의 `make_context`와 `tests/test_http.py`의 토큰/SDK 예시를 사용합니다. LLM 도구 입력에 토큰이나 operator 값을 넣지 않습니다.
 
 ```json
 {"request_id":"<authorized request UUID>","context_version":1,"codes":["3230","3242"]}
