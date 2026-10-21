@@ -8,9 +8,9 @@ import httpx
 import jwt
 import pytest
 from conftest import make_context
+from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from mcp import ClientSession
 from mro_rag.context import issue_token, verify_token
 
 JWT_SECRET = "jwt-integration-only-" * 3

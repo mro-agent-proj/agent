@@ -36,3 +36,7 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "BLE"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/tests", "/migrations", "/integration", "/scripts", "/docs/spec-v1/mcp-tool-contracts.json", "/README.md", "/pyproject.toml", "/uv.lock", "/alembic.ini", "/compose.yaml", "/Makefile", "/.python-version"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mro_rag"]
+known-third-party = ["mcp"]
