@@ -46,6 +46,19 @@ def new_result(name, args):
     }
 
 
+def any_word_tsquery(text):
+    """Explore mode: rank rows matching ANY query word (more words matched rank higher).
+
+    websearch_to_tsquery alone requires every word, so a planner's natural 4-word query
+    ("exit sign light chime") matched nothing. Only ASCII words are kept (SDR/JASC text is English),
+    which also drops quotes and search operators from the input.
+    """
+    words = re.findall(r"[A-Za-z0-9]+", text)
+    if not words:
+        return func.websearch_to_tsquery("english", text)
+    return func.websearch_to_tsquery("english", " or ".join(words))
+
+
 class RagSearch:
     def __init__(self, database: ReadOnlyDatabase, cursor_secret, encoder=None):
         if len(cursor_secret) < 32:
@@ -252,7 +265,7 @@ class RagSearch:
         if "codes" in args:
             query = query.where(db.jasc.c.code.in_(args["codes"]))
         if "query" in args:
-            ts = func.websearch_to_tsquery("english", args["query"])
+            ts = any_word_tsquery(args["query"])
             query = query.where(db.jasc.c.search_document.op("@@")(ts)).order_by(
                 func.ts_rank_cd(db.jasc.c.search_document, ts).desc()
             )
@@ -273,8 +286,10 @@ class RagSearch:
             out["counts"][key] = await conn.scalar(
                 select(func.count()).select_from(db.sdr).where(*self.scope(ctx, locked))
             )
-        parser = func.phraseto_tsquery if args.get("search_mode") == "exact" else func.websearch_to_tsquery
-        ts = parser("english", args["query"])
+        if args.get("search_mode") == "exact":
+            ts = func.phraseto_tsquery("english", args["query"])
+        else:
+            ts = any_word_tsquery(args["query"])
         boost = case((db.sdr.c.reported_jasc.in_(args.get("candidate_jasc", [])), 0.03), else_=0.0)
         score = (func.ts_rank_cd(db.sdr.c.search_document, ts) + boost).label("rank")
         offset = self.page_offset("search_sdr_cases", ctx, args)

@@ -90,6 +90,20 @@ async def test_context_without_operator_pins_model_only(setup_db):
     assert none["status"] == "NO_DATA"
 
 
+async def test_explore_query_matches_any_word_and_exact_keeps_the_phrase(setup_db):
+    owner, _, svc, rid, _ = setup_db
+    claims, args = await make_context(owner, rid)
+    # "wheel" is in the synthetic narratives; the other words are not. Explore still finds them.
+    loose = await svc.invoke("search_sdr_cases", dict(args, query="wheel brake chime light"), claims)
+    assert loose["status"] == "OK" and loose["items"]
+    exact = await svc.invoke(
+        "search_sdr_cases", dict(args, query="wheel brake chime light", search_mode="exact"), claims
+    )
+    assert exact["status"] == "NO_MATCH"
+    jasc = await svc.invoke("search_jasc_codes", dict(args, query="wheel unknownword"), claims)
+    assert jasc["status"] in {"OK", "NO_MATCH"}
+
+
 async def test_scope_cursor_and_evidence_roundtrip(setup_db):
     owner, _, svc, rid, _ = setup_db
     claims, args = await make_context(owner, rid)
