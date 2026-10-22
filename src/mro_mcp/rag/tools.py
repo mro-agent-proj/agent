@@ -1,4 +1,4 @@
-"""R01/R02/R03/R04/R05 tool definitions. Inputs are Pydantic-validated; search.py does the work."""
+"""R01~R05 and the SDR -> AMM handoff lookup. Inputs are Pydantic-validated; search.py does the work."""
 
 from typing import Annotated, Literal
 
@@ -9,7 +9,7 @@ from ..common.app import McpServer
 from ..common.errors import ToolFailure
 from ..common.models import JascCode
 from .auth import principal
-from .models import AmmResponse, EvidenceResponse, JascResponse, SdrResponse, TechResponse
+from .models import AmmResponse, EvidenceResponse, JascResponse, SdrAmmResponse, SdrResponse, TechResponse
 from .search import RagSearch
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True)
@@ -143,6 +143,31 @@ def register(mcp: McpServer, search: RagSearch):
             cursor=cursor,
         )
         return AmmResponse.model_validate(await run("search_amm_references", args))
+
+    @mcp.tool(
+        name="get_sdr_amm_references",
+        title="근거로 쓴 SDR 사례에 인용된 AMM 참조번호와 인용 맥락을 조회한다.",
+        description=(
+            "판단에 쓴 SDR 근거(EV-SDR-*)마다, 그 신고서 원문에 인용된 AMM 번호와 인용 문장을 돌려준다. "
+            "검색이 아니라 조회이며, 배정 후 정비팀에 참고번호로 전달하는 용도다. 부서 판단의 근거로 쓰지 않는다. "
+            "AMM 번호는 실제 매뉴얼 절차의 존재·적용성을 보장하지 않는다. 접수 범위 밖 SDR은 결과에서 빠지고 경고로 알린다."
+        ),
+        annotations=READ_ONLY,
+    )
+    async def get_sdr_amm_references(
+        request_id: RequestId,
+        context_version: ContextVersion,
+        evidence_ids: Annotated[
+            list[Annotated[str, StringConstraints(pattern=r"^EV-SDR-[A-Za-z0-9-]{1,190}$")]],
+            Field(min_length=1, max_length=10, description="판단에 쓴 SDR 근거 ID (EV-SDR-*)"),
+        ],
+    ) -> SdrAmmResponse:
+        args = {
+            "request_id": request_id,
+            "context_version": context_version,
+            "evidence_ids": sorted(set(evidence_ids)),
+        }
+        return SdrAmmResponse.model_validate(await run("get_sdr_amm_references", args))
 
     @mcp.tool(
         name="search_technical_docs",

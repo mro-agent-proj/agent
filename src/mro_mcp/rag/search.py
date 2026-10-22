@@ -106,6 +106,8 @@ class RagSearch:
                     await self.amm_search(conn, ctx, args, out)
                 elif name == "search_technical_docs":
                     await self.tech_search(conn, ctx, args, out)
+                elif name == "get_sdr_amm_references":
+                    await self.sdr_amm(conn, ctx, args, out)
                 elif args["evidence_id"].startswith("EV-DOC-"):
                     await self.tech_evidence(conn, ctx, args, out)
                 else:
@@ -644,3 +646,92 @@ class RagSearch:
             "quote_spans": [{"start": start, "end": end, "text": body}],
         }
         out["counts"]["returned_count"] = 1
+
+    MAX_SDR_AMM = 100
+
+    async def sdr_amm(self, conn, ctx, args, out):
+        """AMM numbers cited in SDR cases already used as evidence: a lookup for the handoff, not a search.
+
+        Only SDR cases inside the pinned run scope are read, the same rule R05 applies.
+        """
+        ev = db.evidence
+        cited = (
+            select(ev.c.evidence_id.label("sdr_evidence_id"), ev.c.sdr_case_uuid)
+            .where(
+                ev.c.release_id == ctx["release_id"],
+                ev.c.source_type == "sdr",
+                ev.c.evidence_id.in_(args["evidence_ids"]),
+            )
+            .subquery()
+        )
+        found = (
+            await conn.execute(
+                select(cited.c.sdr_evidence_id)
+                .select_from(
+                    cited.join(
+                        db.sdr,
+                        and_(db.sdr.c.id == cited.c.sdr_case_uuid, db.sdr.c.release_id == ctx["release_id"]),
+                    )
+                )
+                .where(*self.scope(ctx))
+            )
+        ).scalars().all()
+        out["counts"].update(scope_count=len(args["evidence_ids"]), eligible_count=len(found))
+        missing = sorted(set(args["evidence_ids"]) - set(found))
+        if missing:
+            out["warnings"].append("SDR_NOT_IN_SCOPE: " + ", ".join(missing)[:1900])
+        source = db.amm.join(cited, cited.c.sdr_case_uuid == db.amm.c.sdr_case_uuid).join(
+            db.sdr, and_(db.sdr.c.id == db.amm.c.sdr_case_uuid, db.sdr.c.release_id == db.amm.c.release_id)
+        )
+        rows = (
+            (
+                await conn.execute(
+                    select(db.amm, cited.c.sdr_evidence_id)
+                    .select_from(source)
+                    .where(db.amm.c.release_id == ctx["release_id"], *self.scope(ctx))
+                    .order_by(cited.c.sdr_evidence_id, db.amm.c.distilled_record_id)
+                    .limit(self.MAX_SDR_AMM + 1)
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if len(rows) > self.MAX_SDR_AMM:
+            out["warnings"].append(f"SUMMARY_LIST_TRUNCATED: first {self.MAX_SDR_AMM} references only")
+        for row in rows[: self.MAX_SDR_AMM]:
+            p = row["source_payload"]
+            item = {
+                k: p[k]
+                for k in (
+                    "evidence_id",
+                    "evidence_group_id",
+                    "source_type",
+                    "source_id",
+                    "source_version",
+                    "distilled_record_id",
+                    "source_case_id",
+                    "cited_amm_ref_raw",
+                    "cited_amm_ref_normalized",
+                    "reference_level",
+                    "symptom",
+                    "reported_action",
+                    "outcome",
+                    "relationship_status",
+                    "applicability_status",
+                    "reported_jasc",
+                    "quote",
+                )
+            }
+            item.update(
+                sdr_evidence_id=row["sdr_evidence_id"],
+                locator=locator(p["locator"]),
+                score=None,
+                score_kind="exact",
+            )
+            out["items"].append(item)
+        out["counts"]["returned_count"] = len(out["items"])
+        out["status"] = "OK" if out["items"] else "NO_MATCH"
+        if out["items"]:
+            out["warnings"].append(
+                "AMM_REFERENCE_ONLY: reference numbers cited in the SDR text; procedure and applicability are not verified"
+            )

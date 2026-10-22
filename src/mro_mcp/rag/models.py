@@ -62,6 +62,10 @@ class AmmItem(EvidenceFields):
     reported_jasc: JascCode | None
 
 
+class SdrAmmItem(AmmItem):
+    sdr_evidence_id: str = Field(description="이 AMM 번호가 인용된 SDR 근거 ID (입력한 EV-SDR-*)")
+
+
 class TechItem(EvidenceFields):
     source_type: Literal["airbus_technical_article"]
     locator: Locator
@@ -101,4 +105,5 @@ JascResponse = ListResponse[JascItem]
 SdrResponse = ListResponse[SdrItem]
 AmmResponse = ListResponse[AmmItem]
 TechResponse = ListResponse[TechItem]
+SdrAmmResponse = ListResponse[SdrAmmItem]
 EvidenceResponse = ItemResponse[EvidenceRecord]
