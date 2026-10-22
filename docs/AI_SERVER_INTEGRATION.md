@@ -76,14 +76,14 @@ MCP 프로세스는 RabbitMQ를 소비하거나 LLM을 실행하지 않는다.
 
 ## 연결 상태 (2026-10-21 갱신)
 
-아래 조건 1·2·3은 Backend `McpDelegationService`·Flyway V6와 이 저장소의 business 인증으로 연결했다.
+아래 조건 1·2·3은 Backend `McpDelegationService`·Flyway V9와 이 저장소의 business 인증으로 연결했다.
 
-- 업무 조회 권한: Backend V6가 `repair_requests`의 아래 8개 열만 `mro_business_reader`에 연다.
+- 업무 조회 권한: Backend V9의 AI용 뷰 두 개만 `mro_business_reader`에 연다. `agent_request_context`(접수 내용·상태·버전)와 `agent_run_context`(실행별 검색 범위)이며, V6의 `repair_requests` 열 권한은 V9에서 회수했다. 내부 테이블이 바뀌어도 뷰 열만 유지하면 된다.
 - business 요청 인증: business-mcp도 Backend가 서명한 토큰(aud `mro-business`, `BUSINESS_JWT_SECRET`)을 검증하고,
   도구는 토큰의 `request_id`와 같은 접수 건만 읽는다. 다르면 `FORBIDDEN`.
 - 동일 실행 컨텍스트: Backend가 실행마다 `run_id`를 만들어 `rag_request_contexts`(context_version 1)를 등록하고,
   같은 `run_id`·`request_id`·`sub`(신고자)·`tenant_id`(항공사)로 두 토큰을 서명해 AMQP 헤더
-  `x-mro-business-token`·`x-mro-rag-token`으로 보낸다. B01도 context_version 1을 돌려준다.
+  `x-mro-business-token`·`x-mro-rag-token`으로 보낸다. B01은 토큰의 `run_id`로 같은 실행 행을 읽어 rag-mcp와 같은 `context_version`·범위를 돌려준다. AI는 B01을 실행 시작과 최종 확정 직전에만 부른다.
 - 시연 검색 범위(C02): Backend 컨텍스트는 `operator_code`를 비워 두고 기종(`model_key`)만 고정한다.
   rag-mcp는 운항사가 없는 컨텍스트에서 운항사 필터를 적용하지 않는다(`operator_filter_applied=false`).
   KAL/AAR/JNA를 SDR 운항사에 대응시키지 않는다. 항공사×모델 고정 규칙으로 바꾸려면 운항사 매핑을 정한 뒤
@@ -97,7 +97,7 @@ MCP 프로세스는 RabbitMQ를 소비하거나 LLM을 실행하지 않는다.
    `status`, `created_at`, `version`이다. 공유 DB에 직접 GRANT하지 않는다.
 2. **business 요청 인증:** 현재 business 서버는 AI가 보낸 Bearer를 검증하지 않는다.
    요청별 위임 검증과 권한 확인을 팀 계약으로 정해 구현해야 한다.
-3. **동일 실행 컨텍스트:** 현재 B01은 `context_version=1`, operator 미설정 범위를 반환한다.
+3. **동일 실행 컨텍스트 (V9로 해결):** 예전 B01은 `context_version=1` 상수와, 접수 기종에서 계산한 범위를 반환했다.
    RAG는 서명 토큰과 `rag_request_contexts`의 요청·run·subject·tenant·버전·release/index를 확인한다.
    B01과 RAG에 같은 검증된 범위를 전달하도록 Backend·MCP 계약을 맞춰야 한다.
    KAL/AAR/JNA를 원본 SDR 운항사에 임의 대응시키지 않는다.
