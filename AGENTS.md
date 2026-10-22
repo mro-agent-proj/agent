@@ -4,7 +4,7 @@
 
 - 최신 팀 규약은 로컬 `MRO Agent 팀 인터페이스 규약 v0.1 (3).pdf`의 **본문 v0.3, 29쪽**이다. 파일명·반복 머리말의 v0.1로 버전을 판단하지 않는다. 원문 해시와 대조 근거는 [규약 검토 보고서](reports/team-interface-v03-review.md)에 있다.
 - 사용자 최신 지시를 우선한다. 팀 PDF는 역할·운영·쓰기 경계를, [Google MCP v1.0](https://docs.google.com/document/d/1gyMiTHTtQQ329pOZlAJfNGpa3mmcJO0s-gdOF82bCpA)은 공개 도구 이름·입출력·요청 권한·검색 범위·근거 ID를 정한다. 로컬 JSON이나 구현 제안을 팀 합의로 간주하지 않는다.
-- 최신 사용자 지시에 따라 이 저장소는 DB·business-mcp(B01/B02/B03)·rag-mcp(R01/R02/R03/R05)와 FastAPI AI 서버 연결 구성을 담당한다. LLM1/2/3·FastAPI·RabbitMQ 실행기는 별도 LLM 저장소에 두며 여기로 복제하지 않는다. R04와 실행 컨텍스트·인증 방식 확정은 별도 후속 작업이다.
+- 최신 사용자 지시에 따라 이 저장소는 DB·business-mcp(B01/B02/B03)·rag-mcp(R01~R05)와 FastAPI AI 서버 연결 구성을 담당한다. LLM1/2/3·FastAPI·RabbitMQ 실행기는 별도 LLM 저장소에 두며 여기로 복제하지 않는다. R04는 Backend V5 테이블(경님 전달본)을 읽는다. 실행 컨텍스트·인증 방식 확정은 별도 후속 작업이다.
 - 팀 문서의 미정 항목은 미정으로 표시한다. JWT+컨텍스트 방식과 모델만으로 검색하는 시연 방식은 아직 합의되지 않았다. 기존 권한·범위 검사를 조용히 제거하거나 요청 ID를 권한으로 취급하지 않는다.
 
 ## DB와 데이터 소유권

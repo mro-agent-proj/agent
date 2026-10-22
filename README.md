@@ -1,6 +1,6 @@
 # MRO 정비 근거 MCP (business-mcp · rag-mcp)
 
-AI 서버가 정비 요청을 판단할 때 쓰는 **읽기 전용 MCP 서버 두 개**와, 그 근거 데이터(SDR 사례·AMM 참조·JASC)를 만드는 적재 도구입니다.
+AI 서버가 정비 요청을 판단할 때 쓰는 **읽기 전용 MCP 서버 두 개(도구 8개)**와, 그 근거 데이터(SDR 사례·AMM 참조·JASC)를 만드는 적재 도구입니다.
 Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. 업무 상태를 바꾸거나 LLM을 실행하지 않습니다.
 
 ## 전체 구성에서의 위치
@@ -18,19 +18,39 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 | [LLM](https://github.com/mro-agent-proj/LLM) | AI 서버. 이 레포의 두 MCP를 `streamable_http`로 호출 |
 | [agent](https://github.com/mro-agent-proj/agent) | 이 레포 |
 
-## 도구
+## MCP 서버와 도구 전체
 
-| 서버 | ID | 도구 | 설명 |
-| --- | --- | --- | --- |
-| business-mcp (8101) | B01 | `get_request_context` | 접수 내용, 기체, 현재 상태, 검색 범위(`model_key`) |
-| | B02 | `get_aircraft_history` | 같은 기체의 이전 수리이력(MH-*), 접수 시각 이전만 |
-| | B03 | `search_departments` | 정비 부서와 담당 ATA. JASC 후보로 순위만 조정 |
-| rag-mcp (8102) | R01 | `search_jasc_codes` | JASC 코드 후보·정의 (영어 단어 검색) |
-| | R02 | `search_sdr_cases` | 같은 기종의 SDR 사례 (영어 전문검색) |
-| | R03 | `search_amm_references` | SDR에 인용된 AMM 번호와 인용 맥락 (한국어·영어 의미 검색) |
-| | R05 | `get_evidence` | R02·R03에서 받은 근거의 원문과 인용 위치 재확인 |
+### 서버 2개
 
-도구 제목과 입력 스키마는 `docs/spec-v1/mcp-tool-contracts.json`과 일치해야 합니다(테스트가 확인). 도구 설명(description)은 AI가 도구를 고를 때 읽는 문구이므로, 검색 요령을 여기에 적습니다.
+| 서버 | 주소 | DB 계정 | 읽는 데이터 | 토큰 aud |
+| --- | --- | --- | --- | --- |
+| business-mcp | `:8101/mcp` | `mro_business_reader` | 업무 테이블: `repair_requests`, `aircraft`, `maintenance_history`, `departments` | `mro-business` |
+| rag-mcp | `:8102/mcp` | `mro_reader` | RAG(Backend V3): `jasc_codes`, `sdr_cases`, `amm_*`, `evidence`, `knowledge_*` · 기술자료(Backend V5): `tech_*` · 실행 범위 `rag_request_contexts` | `mro-rag` |
+
+두 서버 모두 읽기 전용이고, 업무 상태를 바꾸거나 LLM을 실행하지 않습니다. 쓰기 도구(B04~B06, R06)는 등록하지 않습니다.
+
+### 도구 8개
+
+| ID | 도구 | 하는 일 | 주요 입력 | 읽는 데이터 | 근거 ID | 누가 부르나 | AI 실제 호출 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| B01 | `get_request_context` | 접수 내용·기체·현재 상태, 검색 범위(`model_key`)와 `context_version` | `request_id` | `repair_requests`, `aircraft` | - | AI 실행기: 단계마다 고정 확인 | 461 |
+| B02 | `get_aircraft_history` | 같은 기체의 이전 수리이력. 접수 시각 이전만 | `occurred_from`·`occurred_to`, `limit` | `maintenance_history` 1,577 | `MH-*` | LLM1 이력 비교, LLM2·LLM3(LLM1이 이력을 연결했을 때만), 최종 근거 검증 | 296 |
+| B03 | `search_departments` | 정비 부서와 담당 ATA. JASC 후보 앞 두 자리로 순위만 조정 | `query`, `candidate_jasc` | `departments` 8 | - | AI 실행기: 단계마다 고정 확인 (도구 예산 제외) | 459 |
+| R01 | `search_jasc_codes` | JASC 코드 후보와 공식 명칭·정의 | `query`(영어) 또는 `codes` | `jasc_codes` 548 | - | LLM2·LLM3가 골라서 | 0 |
+| R02 | `search_sdr_cases` | 같은 기종의 SDR 사례. 영어 전문검색 | `query`(영어 2~5단어), `candidate_jasc`, `search_mode` | `sdr_cases` 71,741 | `EV-SDR-*` | LLM2·LLM3가 골라서 | 41 |
+| R03 | `search_amm_references` | SDR에 인용된 AMM 번호와 인용 맥락. 의미 검색 또는 번호 조회 | `query` 또는 `amm_reference_exact` | `amm_references` 35,396, `amm_chunks`·`rag.amm_embeddings` 31,678 | `EV-AMM-*` | LLM2·LLM3가 골라서 | 0 |
+| R04 | `search_technical_docs` | Airbus Safety First 정비 기사 의미 검색 (2026-10-22 추가) | `query`, `system_keywords`, `include_unknown_applicability` | `tech_documents` 61, `tech_chunks`·`rag.tech_embeddings` 496 | `EV-DOC-*` | LLM2·LLM3가 골라서 | 0 |
+| R05 | `get_evidence` | R02·R03·R04에서 받은 근거의 원문과 인용 위치 재확인 | `evidence_id` | `evidence` 107,137, `tech_chunks` | 입력한 ID | LLM2·LLM3, 최종 근거 검증 | 73 |
+
+모든 도구는 `request_id`(토큰과 같아야 함)를 받고, rag-mcp 도구는 `context_version`도 받습니다. 검색 도구는 `limit`과 `cursor`로 페이지를 넘깁니다.
+
+**AI 실제 호출**은 서버 로그의 호출 수입니다. 시나리오 평가·시연 실행이 들어 있고, 직접 테스트한 호출은 뺐습니다.
+- business-mcp: 2026-10-21 16:29부터
+- rag-mcp: 2026-10-21 17:26 ~ 2026-10-22 14:00 (KST)
+
+LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니다. 의미 검색(R03·R04)과 JASC 확인(R01)을 실제로 쓰게 하려면 LLM 레포 프롬프트의 도구 선택 기준을 보강해야 합니다.
+
+도구 제목과 입력 스키마는 `docs/spec-v1/mcp-tool-contracts.json`과 일치해야 하고, 응답은 같은 파일의 출력 스키마로 검증합니다(테스트가 확인). 도구 설명(description)은 AI가 도구를 고를 때 읽는 문구라서 검색 요령을 여기에 적습니다.
 
 ### 인증과 검색 범위
 
@@ -45,6 +65,13 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 - R02 기본 모드(`explore`)와 R01은 **단어가 하나라도 맞으면** 많이 맞는 순으로 돌려줍니다. R02 `search_mode="exact"`는 구절 그대로 찾습니다.
 - R03 질의는 `intfloat/multilingual-e5-small` 임베딩으로 의미 검색합니다(한국어 가능, CPU).
 - AMM 자료는 SDR에서 추출한 **참조번호와 인용 맥락**입니다. 실제 정비 매뉴얼 절차나 검증된 적용성이 아닙니다. 검색 점수는 진단 정확도나 정답 확률이 아닙니다.
+- R04는 Backend V5 테이블(`tech_documents`·`tech_chunks`·`rag.tech_embeddings`, Safety First 61편)을 R03과 같은 임베딩 모델로 의미 검색합니다. 규칙은 다음과 같습니다.
+  - **대상**: 정비(`maintenance`) 기사 23편만 검색합니다.
+  - **기종군**: 접수 기종의 기종군(예: A320214 → A320 계열)이나 "all Airbus" 같은 전 기종을 언급한 기사만 돌려줍니다. 다른 기종군만 언급한 기사는 뺍니다.
+  - **적용 범위 미상**: 기종을 언급하지 않은 기사와 `unknown` 문단은 `include_unknown_applicability=true`일 때만 참고로 포함합니다.
+  - **운항사 필터**: 공개 자료라 적용하지 않습니다(`operator_filter_applied=false`).
+  - **스냅샷**: `snapshot_ids`는 기사 버전과 임베딩 모델에서 만든 `TECH-*` 하나이며, R04와 R05(EV-DOC)가 같은 값을 돌려줍니다.
+  - 기사는 계통 이해·점검 포인트 참고 자료이며 현재 기체의 정비 절차나 적용성 확인이 아닙니다.
 
 ## 실행 (backend와 함께)
 
@@ -97,7 +124,7 @@ export TEST_DATABASE_URL=postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1
 export TEST_RAG_DATABASE_URL=postgresql+asyncpg://mro_reader:local-reader-only@127.0.0.1:55432/mro_test
 DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
 psql ... -f scripts/create_reader.sql
-uv run --extra dev pytest                     # 33개 + backend 실DB가 필요한 1개 skip
+uv run --extra dev pytest                     # 35개 + backend 실DB가 필요한 1개 skip
 ```
 
 테스트는 독립 합성 데이터를 만들어 실행하므로 원본 파일이 없어도 재현됩니다.
@@ -109,7 +136,7 @@ src/
 ├── mro_mcp/
 │   ├── common/     MCP 서버 공통(응답 봉투, 오류, 읽기 전용 DB, 토큰 미들웨어)
 │   ├── business/   business-mcp: B01~B03, 토큰의 request_id 확인
-│   └── rag/        rag-mcp: R01~R03·R05, 검색 범위 고정, cursor 서명
+│   └── rag/        rag-mcp: R01~R05, 검색 범위 고정, cursor 서명 (tech.py: R04 테이블·기종군 판단)
 └── mro_rag/        적재(ingest)·임베딩·컨텍스트(토큰 발급·검증, 범위 등록 참고 구현)·CLI
 migrations/         로컬 제작 DB용 Alembic
 docker/             business-mcp, rag-mcp Dockerfile

@@ -11,7 +11,7 @@
 |---|---|---|
 | FastAPI AI 서버 | LLM | 8100, 상태 확인·RabbitMQ 실행기·LangChain/LangGraph LLM1/2/3 |
 | business-mcp | agent | 8101 `/mcp`, B01/B02/B03, `mro_business_reader` |
-| rag-mcp | agent | 8102 `/mcp`, R01/R02/R03/R05, `mro_reader` |
+| rag-mcp | agent | 8102 `/mcp`, R01~R05, `mro_reader` |
 | Spring·PostgreSQL·RabbitMQ | backend | DB·계정·데이터·큐 선언·업무 상태 변경 |
 
 AI는 `MultiServerMCPClient`의 `streamable_http`로 두 서버를 호출한다.

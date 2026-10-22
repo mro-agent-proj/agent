@@ -1,4 +1,4 @@
-"""Search logic for R01/R02/R03/R05. Every query is authorized and pinned to an immutable run.
+"""Search logic for R01/R02/R03/R04/R05. Every query is authorized and pinned to an immutable run.
 
 Moved from mro_rag/service.py: input/output validation and error envelopes now live in common.McpServer;
 queries, scoping, cursors and ranking are unchanged.
@@ -13,14 +13,15 @@ import re
 import time
 from datetime import UTC, date, datetime
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, false, func, select, text
 
 from mro_rag import db
-from mro_rag.embedding import CONFIG, LocalEncoder
+from mro_rag.embedding import CONFIG, MODEL_VERSION, LocalEncoder
 from mro_rag.ingest import json_hash
 
 from ..common.db import ReadOnlyDatabase
 from ..common.errors import ToolFailure
+from . import tech
 
 CARRIED = ("applied_scope", "snapshot_ids", "counts", "warnings")
 
@@ -103,6 +104,10 @@ class RagSearch:
                     await self.sdr_search(conn, ctx, args, out)
                 elif name == "search_amm_references":
                     await self.amm_search(conn, ctx, args, out)
+                elif name == "search_technical_docs":
+                    await self.tech_search(conn, ctx, args, out)
+                elif args["evidence_id"].startswith("EV-DOC-"):
+                    await self.tech_evidence(conn, ctx, args, out)
                 else:
                     await self.get_evidence(conn, ctx, args, out)
             except ToolFailure as failure:
@@ -487,4 +492,155 @@ class RagSearch:
             parent_source_ids=[row["case_id"]] if row["source_type"] == "derived_amm_reference" else [],
             quote_spans=[{"start": loc["start_offset"], "end": loc["end_offset"], "text": row["quote"]}],
         )
+        out["counts"]["returned_count"] = 1
+
+    async def tech_scope(self, conn, ctx, out, include_unknown):
+        """Pins the article snapshot and returns {document_id: applies} for articles in the model's family.
+
+        Public articles have no operator, so the operator filter is never applied (the AI rejects it).
+        """
+        if await conn.scalar(text("SELECT to_regclass('public.tech_documents')")) is None:
+            raise ToolFailure("INDEX_NOT_READY", "Technical articles are not restored")
+        models = set((await conn.execute(select(tech.embeddings.c.embedding_model_version).distinct())).scalars())
+        if models - {MODEL_VERSION}:
+            raise ToolFailure(
+                "INDEX_VERSION_UNAVAILABLE", "Server encoder does not match the article embeddings"
+            )
+        d = tech.documents
+        versions = (await conn.execute(select(d.c.document_id, d.c.source_version).order_by(d.c.document_id))).all()
+        out["snapshot_ids"] = [tech.snapshot_id([f"{doc}:{version}" for doc, version in versions], MODEL_VERSION)]
+        out["applied_scope"]["operator_filter_applied"] = False
+        rows = (
+            (
+                await conn.execute(
+                    select(d.c.document_id, d.c.title, d.c.applicability_basis, d.c.configuration_conditions).where(
+                        d.c.category == tech.SEARCH_CATEGORY
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        scope = {}
+        for row in rows:
+            conditions = " ".join(str(x) for x in row["configuration_conditions"] or [])
+            verdict = tech.applies(ctx["model_key"], row["title"], row["applicability_basis"], conditions)
+            if verdict is True or (verdict is None and include_unknown):
+                scope[row["document_id"]] = verdict
+        return scope
+
+    @staticmethod
+    def tech_locator(row):
+        return {
+            "source_url": row["url"],
+            "file_id": row["document_id"],
+            "record_key": row["chunk_id"],
+            "section": row["section"],
+            "start_offset": row["start_offset"],
+            "end_offset": row["end_offset"],
+        }
+
+    async def tech_search(self, conn, ctx, args, out):
+        include_unknown = args.get("include_unknown_applicability", False)
+        scope = await self.tech_scope(conn, ctx, out, include_unknown)
+        c, d, e = tech.chunks, tech.documents, tech.embeddings
+        in_scope = c.c.document_id.in_(list(scope)) if scope else false()
+        eligible = [in_scope]
+        if not include_unknown:
+            # Contract: an unknown paragraph is never promoted to general applicability evidence.
+            eligible.append(c.c.applicability_status.in_(("supported", "conditional")))
+        out["counts"]["scope_count"] = await conn.scalar(select(func.count()).select_from(c).where(in_scope))
+        out["counts"]["eligible_count"] = await conn.scalar(select(func.count()).select_from(c).where(*eligible))
+        vector = await self.query_vector(args["query"])
+        score = 1 - e.c.embedding.cosine_distance(vector)
+        keywords = args.get("system_keywords", [])
+        if keywords:
+            score = score + case(
+                (c.c.search_document.op("@@")(any_word_tsquery(" ".join(keywords))), 0.03), else_=0.0
+            )
+        score = score.label("rank")
+        offset = self.page_offset("search_technical_docs", ctx, args)
+        source = c.join(d, d.c.document_id == c.c.document_id).join(
+            e, and_(e.c.chunk_id == c.c.chunk_id, e.c.embedding_model_version == MODEL_VERSION)
+        )
+        rows = (
+            (
+                await conn.execute(
+                    select(c, d.c.title, d.c.url, d.c.source_version, score)
+                    .select_from(source)
+                    .where(*eligible)
+                    .order_by(score.desc(), c.c.chunk_id)
+                    .offset(offset)
+                    .limit(args["limit"] + 1)
+                )
+            )
+            .mappings()
+            .all()
+        )
+        selected = self.finish_page("search_technical_docs", ctx, args, out, rows, offset)
+        for row in selected:
+            out["items"].append(
+                {
+                    "evidence_id": row["evidence_id"],
+                    "evidence_group_id": row["evidence_group_id"],
+                    "source_type": "airbus_technical_article",
+                    "source_id": row["document_id"],
+                    "source_version": row["source_version"],
+                    "locator": self.tech_locator(row),
+                    "quote": row["text"],
+                    "score": float(row["rank"]),
+                    "score_kind": "fusion" if keywords else "vector",
+                    "document_id": row["document_id"],
+                    "chunk_id": row["chunk_id"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "section": row["section"],
+                    "excerpt": row["text"],
+                    # An article that names no aircraft type is unknown, whatever its paragraph says.
+                    "applicability_status": row["applicability_status"] if scope[row["document_id"]] else "unknown",
+                    "applicability_basis": row["applicability_basis"],
+                    "configuration_conditions": [
+                        str(x)[:2000] for x in row["configuration_conditions"] or []
+                    ][:30],
+                }
+            )
+        if selected:
+            out["warnings"].append(
+                "TECHNICAL_REFERENCE_ONLY: public Airbus article; applicability to this aircraft is not verified"
+            )
+        if any(item["applicability_status"] == "unknown" for item in out["items"]):
+            out["warnings"].append("APPLICABILITY_UNKNOWN: unknown items are reference only")
+
+    async def tech_evidence(self, conn, ctx, args, out):
+        # R05 re-checks any article the search could return, unknown applicability included.
+        scope = await self.tech_scope(conn, ctx, out, include_unknown=True)
+        c, d = tech.chunks, tech.documents
+        row = (
+            (
+                await conn.execute(
+                    select(c, d.c.url, d.c.source_version, d.c.body_text)
+                    .select_from(c.join(d, d.c.document_id == c.c.document_id))
+                    .where(c.c.evidence_id == args["evidence_id"])
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if not row or row["document_id"] not in scope:
+            out["status"] = "NO_MATCH"
+            return
+        start, end = row["start_offset"], row["end_offset"]
+        body = row["body_text"][start:end]
+        out["result"] = {
+            "evidence_id": row["evidence_id"],
+            "evidence_group_id": row["evidence_group_id"],
+            "source_type": "airbus_technical_article",
+            "source_id": row["document_id"],
+            "source_version": row["source_version"],
+            "quote": row["text"],
+            "locator": self.tech_locator(row),
+            "text": body,
+            "parent_source_ids": [],
+            "quote_spans": [{"start": start, "end": end, "text": body}],
+        }
         out["counts"]["returned_count"] = 1

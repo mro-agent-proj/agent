@@ -25,7 +25,7 @@ def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encode
         port=int(os.environ.get("RAG_PORT", "8102")),
         # Docker clients send the service name as Host (e.g. rag-mcp:8102).
         allowed_hosts=os.environ.get("RAG_ALLOWED_HOSTS", DEFAULT_HOSTS).split(","),
-        instructions="JASC 코드표, SDR 사례, SDR에 인용된 AMM 참조와 근거 원문을 조회하는 읽기 전용 도구입니다.",
+        instructions="JASC 코드표, SDR 사례, SDR에 인용된 AMM 참조, Airbus 공개 기술자료와 근거 원문을 조회하는 읽기 전용 도구입니다.",
         http_middleware=[auth.middleware(jwt_secret)],
         startup=search.preload_encoder if os.environ.get("RAG_PRELOAD_ENCODER", "false").lower() == "true" else None,
     )

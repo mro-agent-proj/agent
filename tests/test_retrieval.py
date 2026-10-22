@@ -18,7 +18,13 @@ async def test_tools_are_read_only_and_named_as_spec():
         cursor_secret="cursor-test-secret-" * 3,
     )
     tools = {t.name: t for t in await server.list_tools()}
-    assert set(tools) == {"search_jasc_codes", "search_sdr_cases", "search_amm_references", "get_evidence"}
+    assert set(tools) == {
+        "search_jasc_codes",
+        "search_sdr_cases",
+        "search_amm_references",
+        "search_technical_docs",
+        "get_evidence",
+    }
     assert all(t.annotations.readOnlyHint for t in tools.values())
     with open("docs/spec-v1/mcp-tool-contracts.json") as f:
         documented = {t["mcp"]["name"]: t["mcp"] for t in json.load(f)["tools"]}
