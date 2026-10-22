@@ -37,7 +37,7 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 | B02 | `get_aircraft_history` | 같은 기체의 이전 수리이력. 접수 시각 이전만 | `occurred_from`·`occurred_to`, `limit` | `maintenance_history` 1,577 | `MH-*` | LLM1 이력 비교, LLM2·LLM3(LLM1이 이력을 연결했을 때만), 최종 근거 검증 | 296 |
 | B03 | `search_departments` | 정비 부서와 담당 ATA. JASC 후보 앞 두 자리로 순위만 조정 | `query`, `candidate_jasc` | `departments` 8 | - | AI 실행기: 단계마다 고정 확인 (도구 예산 제외) | 459 |
 | R01 | `search_jasc_codes` | JASC 코드 후보와 공식 명칭·정의 | `query`(영어) 또는 `codes` | `jasc_codes` 548 | - | LLM2·LLM3가 골라서 | 0 |
-| R02 | `search_sdr_cases` | 같은 기종의 SDR 사례. 영어 전문검색 | `query`(영어 2~5단어), `candidate_jasc`, `search_mode` | `sdr_cases` 71,741 | `EV-SDR-*` | LLM2·LLM3가 골라서 | 41 |
+| R02 | `search_sdr_cases` | 같은 기종의 SDR 사례. 단어 검색 + 의미 검색 하이브리드 (한국어 질의 가능) | `query`, `candidate_jasc`, `search_mode` | `sdr_cases` 71,741, `rag.sdr_embeddings` 71,741 | `EV-SDR-*` | LLM2·LLM3가 골라서 | 41 |
 | R03 | `search_amm_references` | SDR에 인용된 AMM 번호와 인용 맥락. 의미 검색 또는 번호 조회 | `query` 또는 `amm_reference_exact` | `amm_references` 35,396, `amm_chunks`·`rag.amm_embeddings` 31,678 | `EV-AMM-*` | LLM2·LLM3가 골라서 | 0 |
 | R04 | `search_technical_docs` | Airbus Safety First 정비 기사 의미 검색 (2026-10-22 추가) | `query`, `system_keywords`, `include_unknown_applicability` | `tech_documents` 61, `tech_chunks`·`rag.tech_embeddings` 496 | `EV-DOC-*` | LLM2·LLM3가 골라서 | 0 |
 | R05 | `get_evidence` | R02·R03·R04에서 받은 근거의 원문과 인용 위치 재확인 | `evidence_id` | `evidence` 107,137, `tech_chunks` | 입력한 ID | LLM2·LLM3, 최종 근거 검증 | 73 |
@@ -64,7 +64,17 @@ LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니�
 
 ### 검색 방식
 
-- SDR·JASC 원문은 영어입니다. 검색어는 영어 핵심어 2~5개가 좋습니다(예: `brake vibration taxi`, `FLAP SYS 1 FAULT`). 한국어 단어는 무시됩니다.
+- SDR·JASC 원문은 영어입니다. R01과 R02의 단어 검색 쪽은 영어 핵심어 2~5개가 좋습니다(예: `brake vibration taxi`, `FLAP SYS 1 FAULT`). 단어 검색에서 한국어 단어는 무시됩니다.
+- **R02 하이브리드** (`explore` 모드):
+  - **방식**: 같은 접수 범위에서 단어 검색 상위 50건과 의미 검색 상위 50건을 뽑아 순위를 합칩니다(Reciprocal Rank Fusion, k=60). 결과의 `score`는 합친 순위 점수이고 `score_kind`는 `fusion`입니다.
+  - **의미 검색 데이터**: SDR 원문 임베딩(Backend V7 `rag.sdr_embeddings`, OpenAI `text-embedding-3-large` 1024차원)을 씁니다. 질의도 같은 모델로 임베딩하며, rag-mcp 환경변수 `RAG_OPENAI_API_KEY`가 필요합니다(질의 한 번에 약 $0.000003).
+  - **단어 검색으로 돌아가는 경우**: 키가 없거나, 임베딩이 복원되지 않았거나, 임베딩 호출이 실패하면 지금처럼 단어 검색만 합니다. 이때 `VECTOR_UNAVAILABLE: …` 경고를 남깁니다. `search_mode="exact"`도 단어 검색(구절 일치)만 씁니다.
+  - **효과** (정확한 기종 범위, 평가셋 `backend/data/eval/sdr`):
+    - SDR 원문 영어 400: 상위 5건 ATA 일치 52% → 68%
+    - 증상 영어 200: 59% → 74%
+    - 증상 한국어 200: 28% → 64% (결과 없음 59건 → 0건)
+  - **속도**: 질의당 중앙값 0.42초입니다.
+  - **임베딩 다시 만들기**: `scripts/embed_sdr_openai.py`가 비어 있는 행만 임베딩하고(약 $0.6), Backend 전달본(`data/rag-dump/sdr-embeddings_v1`)으로 묶습니다.
 - R02 기본 모드(`explore`)와 R01은 **단어가 하나라도 맞으면** 많이 맞는 순으로 돌려줍니다. R02 `search_mode="exact"`는 구절 그대로 찾습니다.
 - R03 질의는 `intfloat/multilingual-e5-small` 임베딩으로 의미 검색합니다(한국어 가능, CPU).
 - AMM 자료는 SDR에서 추출한 **참조번호와 인용 맥락**입니다. 실제 정비 매뉴얼 절차나 검증된 적용성이 아닙니다. 검색 점수는 진단 정확도나 정답 확률이 아닙니다.
@@ -78,7 +88,7 @@ LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니�
 
 ## 실행 (backend와 함께)
 
-backend가 먼저 떠 있어야 합니다(Postgres, Flyway V1~V6, 시드, RAG 복원). 두 MCP는 backend의 Docker 네트워크(`backend_default`)에 붙습니다.
+backend가 먼저 떠 있어야 합니다(Postgres, Flyway V1~V7, 시드, RAG·기술자료·SDR 임베딩 복원). 두 MCP는 backend의 Docker 네트워크(`backend_default`)에 붙습니다.
 
 ```bash
 cp .env.mcp.example .env.mcp      # 값 채우기 (아래 표)
@@ -93,6 +103,7 @@ curl http://127.0.0.1:8101/health/ready && curl http://127.0.0.1:8102/health/rea
 | `BUSINESS_JWT_SECRET` | backend `MCP_BUSINESS_JWT_SECRET`과 같은 값 (backend local 기본값은 `.env.mcp.example` 주석 참고) |
 | `RAG_JWT_SECRET` | backend `MCP_RAG_JWT_SECRET`과 같은 값 |
 | `RAG_CURSOR_SECRET` | 임의의 32자 이상, JWT 비밀값과 다르게 |
+| `RAG_OPENAI_API_KEY` | R02 하이브리드 질의 임베딩용 OpenAI 키. 비우면 단어 검색만 함 |
 | `BACKEND_NETWORK` | `backend_default` |
 
 - rag-mcp 이미지는 **CPU 전용 PyTorch**를 씁니다(약 2GB, 깨끗한 빌드 1분 안팎). 처음 시작할 때 고정 리비전의 임베딩 모델을 내려받아 `rag-model-cache` 볼륨에 보관하고, 모델을 미리 올린 뒤에 요청을 받습니다.
@@ -127,7 +138,7 @@ export TEST_DATABASE_URL=postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1
 export TEST_RAG_DATABASE_URL=postgresql+asyncpg://mro_reader:local-reader-only@127.0.0.1:55432/mro_test
 DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
 psql ... -f scripts/create_reader.sql
-uv run --extra dev pytest                     # 36개 + backend 실DB가 필요한 1개 skip
+uv run --extra dev pytest                     # 38개 + backend 실DB가 필요한 1개 skip
 ```
 
 테스트는 독립 합성 데이터를 만들어 실행하므로 원본 파일이 없어도 재현됩니다.

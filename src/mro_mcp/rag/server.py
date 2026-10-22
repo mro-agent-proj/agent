@@ -6,18 +6,22 @@ import os
 from ..common.app import McpServer
 from ..common.db import ReadOnlyDatabase
 from . import auth, tools
+from .sdr_vectors import OpenAIQueryEncoder
 from .search import RagSearch
 
 DEFAULT_HOSTS = "127.0.0.1:*,localhost:*,testserver"
 
 
-def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encoder=None):
+def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encoder=None, sdr_encoder=None):
     jwt_secret = jwt_secret or os.environ["RAG_JWT_SECRET"]
     cursor_secret = cursor_secret or os.environ["RAG_CURSOR_SECRET"]
     if min(len(jwt_secret), len(cursor_secret)) < 32 or jwt_secret == cursor_secret:
         raise ValueError("Use distinct JWT/cursor secrets with at least 32 characters each")
     database = ReadOnlyDatabase(database_url or os.environ["RAG_DATABASE_URL"], schemas=("public", "rag"))
-    search = RagSearch(database, cursor_secret, encoder)
+    if sdr_encoder is None and os.environ.get("RAG_OPENAI_API_KEY"):
+        # R02 hybrid: the query must use the model the SDR documents were embedded with (Backend V7).
+        sdr_encoder = OpenAIQueryEncoder(os.environ["RAG_OPENAI_API_KEY"])
+    search = RagSearch(database, cursor_secret, encoder, sdr_encoder)
     mcp = McpServer(
         "mro-rag",
         database=database,

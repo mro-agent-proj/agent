@@ -21,7 +21,7 @@ from mro_rag.ingest import json_hash
 
 from ..common.db import ReadOnlyDatabase
 from ..common.errors import ToolFailure
-from . import tech
+from . import sdr_vectors, tech
 
 CARRIED = ("applied_scope", "snapshot_ids", "counts", "warnings")
 
@@ -61,10 +61,11 @@ def any_word_tsquery(text):
 
 
 class RagSearch:
-    def __init__(self, database: ReadOnlyDatabase, cursor_secret, encoder=None):
+    def __init__(self, database: ReadOnlyDatabase, cursor_secret, encoder=None, sdr_encoder=None):
         if len(cursor_secret) < 32:
             raise ValueError("Cursor secret must be at least 32 characters")
         self.database, self.secret, self.encoder = database, cursor_secret.encode(), encoder
+        self.sdr_encoder = sdr_encoder  # R02 semantic half; None means lexical only
         self.encode_lock = asyncio.Lock()
 
     async def preload_encoder(self):
@@ -287,6 +288,27 @@ class RagSearch:
                 "JASC_TITLE_UNVERIFIED: source contains a code without a verified official title"
             )
 
+    RRF_K = 60  # reciprocal rank fusion constant (Cormack et al. 2009)
+    FUSION_POOL = 50  # candidates taken from each half before fusing
+
+    async def sdr_vector_ready(self, conn, ctx, out):
+        """Semantic half only when documents were embedded with the encoder this server queries with."""
+        if self.sdr_encoder is None:
+            out["warnings"].append("VECTOR_UNAVAILABLE: no query encoder configured; lexical ranking only")
+            return False
+        if await conn.scalar(text("SELECT to_regclass('rag.sdr_embeddings')")) is None:
+            out["warnings"].append("VECTOR_UNAVAILABLE: SDR embeddings are not restored; lexical ranking only")
+            return False
+        e = sdr_vectors.embeddings
+        ready = await conn.scalar(
+            select(e.c.sdr_case_uuid)
+            .where(e.c.release_id == ctx["release_id"], e.c.embedding_model_version == self.sdr_encoder.version)
+            .limit(1)
+        )
+        if ready is None:
+            out["warnings"].append("VECTOR_UNAVAILABLE: no embeddings for this release and model; lexical ranking only")
+        return ready is not None
+
     async def sdr_search(self, conn, ctx, args, out):
         await self.ready_index(conn, ctx, "sdr", "LEXICAL")
         for key, locked in [("scope_count", False), ("eligible_count", True)]:
@@ -300,19 +322,30 @@ class RagSearch:
         boost = case((db.sdr.c.reported_jasc.in_(args.get("candidate_jasc", [])), 0.03), else_=0.0)
         score = (func.ts_rank_cd(db.sdr.c.search_document, ts) + boost).label("rank")
         offset = self.page_offset("search_sdr_cases", ctx, args)
-        rows = (
-            (
-                await conn.execute(
-                    select(db.sdr, score)
-                    .where(*self.scope(ctx), db.sdr.c.search_document.op("@@")(ts))
-                    .order_by(score.desc(), db.sdr.c.case_id)
-                    .offset(offset)
-                    .limit(args["limit"] + 1)
+        vector = None
+        if args.get("search_mode") != "exact" and await self.sdr_vector_ready(conn, ctx, out):
+            try:
+                vector = await self.sdr_encoder.encode(args["query"])
+            except Exception as exc:  # noqa: BLE001 - the lexical half still answers
+                out["warnings"].append(f"VECTOR_UNAVAILABLE: query embedding failed ({type(exc).__name__})")
+        if vector is None:
+            rows = (
+                (
+                    await conn.execute(
+                        select(db.sdr, score)
+                        .where(*self.scope(ctx), db.sdr.c.search_document.op("@@")(ts))
+                        .order_by(score.desc(), db.sdr.c.case_id)
+                        .offset(offset)
+                        .limit(args["limit"] + 1)
+                    )
                 )
+                .mappings()
+                .all()
             )
-            .mappings()
-            .all()
-        )
+            kind = "fusion" if args.get("candidate_jasc") else "lexical"
+        else:
+            rows = await self.sdr_fused(conn, ctx, args, ts, score, boost, vector, offset)
+            kind = "fusion"
         selected = self.finish_page("search_sdr_cases", ctx, args, out, rows, offset)
         for row in selected:
             p = row["source_payload"]
@@ -349,7 +382,7 @@ class RagSearch:
                 source_locator=locator(p["locator"]),
                 quote=p["quote"],
                 score=float(row["rank"]),
-                score_kind="fusion" if args.get("candidate_jasc") else "lexical",
+                score_kind=kind,
                 difficulty_date=row["difficulty_date"].isoformat(),
                 submission_date=row["submission_date"].isoformat(),
                 narrative_excerpt=row["narrative_raw"],
@@ -358,6 +391,45 @@ class RagSearch:
                 cited_references=list(refs[:30]),
             )
             out["items"].append(item)
+
+
+    async def sdr_fused(self, conn, ctx, args, ts, lexical_score, boost, vector, offset):
+        """Reciprocal rank fusion of the lexical and semantic rankings, both inside the pinned scope."""
+        e = sdr_vectors.embeddings
+        pool = max(self.FUSION_POOL, offset + args["limit"] + 1)
+        lexical = (
+            await conn.execute(
+                select(db.sdr.c.id, db.sdr.c.case_id)
+                .where(*self.scope(ctx), db.sdr.c.search_document.op("@@")(ts))
+                .order_by(lexical_score.desc(), db.sdr.c.case_id)
+                .limit(pool)
+            )
+        ).all()
+        similarity = (1 - e.c.embedding.cosine_distance(vector)) + boost
+        semantic = (
+            await conn.execute(
+                select(db.sdr.c.id, db.sdr.c.case_id)
+                .select_from(
+                    db.sdr.join(e, and_(e.c.sdr_case_uuid == db.sdr.c.id, e.c.release_id == db.sdr.c.release_id))
+                )
+                .where(*self.scope(ctx), e.c.embedding_model_version == self.sdr_encoder.version)
+                .order_by(similarity.desc(), db.sdr.c.case_id)
+                .limit(pool)
+            )
+        ).all()
+        fused, case_ids = {}, {}
+        for ranking in (lexical, semantic):
+            for position, (sdr_id, case_id) in enumerate(ranking, start=1):
+                fused[sdr_id] = fused.get(sdr_id, 0.0) + 1.0 / (self.RRF_K + position)
+                case_ids[sdr_id] = case_id
+        ordered = sorted(fused, key=lambda i: (-fused[i], case_ids[i]))[offset : offset + args["limit"] + 1]
+        if not ordered:
+            return []
+        found = {
+            row["id"]: row
+            for row in (await conn.execute(select(db.sdr).where(db.sdr.c.id.in_(ordered)))).mappings().all()
+        }
+        return [{**found[i], "rank": fused[i]} for i in ordered]
 
     async def query_vector(self, query):
         async with self.encode_lock:

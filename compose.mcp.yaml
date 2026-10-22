@@ -27,6 +27,8 @@ services:
       RAG_CURSOR_SECRET: ${RAG_CURSOR_SECRET:?Set a separate cursor secret}
       RAG_ALLOWED_HOSTS: 127.0.0.1:*,localhost:*,rag-mcp:*
       RAG_PRELOAD_ENCODER: "true"
+      # R02 하이브리드 질의 임베딩(OpenAI text-embedding-3-large@1024). 비우면 단어 검색만 합니다.
+      RAG_OPENAI_API_KEY: ${RAG_OPENAI_API_KEY:-}
       HF_HOME: /var/cache/mro/huggingface
       MRO_EMBED_DEVICE: cpu
     volumes:
