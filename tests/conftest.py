@@ -314,3 +314,59 @@ async def seed_tech(owner):
                     embedding=encoder.encode([embedding_text])[0].tolist(),
                 )
             )
+
+
+SDR_VECTOR_DDL = Path(__file__).resolve().parent.parent / "integration/backend/V7__rag_sdr_embeddings.sql"
+
+
+class FixedQueryEncoder:
+    """R02 semantic half for tests: 'wheel'/'바퀴' points one way, anything else the other."""
+
+    version = "openai:text-embedding-3-large@1024"
+
+    def __init__(self, fail=False):
+        self.fail = fail
+
+    async def encode(self, text):
+        if self.fail:
+            raise TimeoutError("synthetic outage")
+        return vector_for(text)
+
+
+def vector_for(text):
+    v = [0.0] * 1024
+    v[0 if ("wheel" in text.lower() or "바퀴" in text) else 1] = 1.0
+    return v
+
+
+async def seed_sdr_vectors(owner, release_id):
+    """Backend V7 table (not in the local Alembic chain) with one vector per synthetic SDR."""
+    from mro_mcp.rag import sdr_vectors
+
+    async with owner.begin() as conn:
+        if await conn.scalar(text("SELECT to_regclass('rag.sdr_embeddings')")) is None:
+            for statement in SDR_VECTOR_DDL.read_text().split(";\n"):
+                if any(line.strip() and not line.strip().startswith("--") for line in statement.splitlines()):
+                    await conn.exec_driver_sql(statement)
+        await conn.execute(delete(sdr_vectors.embeddings))
+        rows = (await conn.execute(select(db.sdr.c.id, db.sdr.c.case_id).where(db.sdr.c.release_id == release_id))).all()
+        for sdr_id, case_id in rows:
+            # SDR-TEST-2 gets the "other" direction so the semantic half has something to rank below.
+            await conn.execute(
+                insert(sdr_vectors.embeddings).values(
+                    release_id=release_id, sdr_case_uuid=sdr_id, content_hash="test",
+                    embedding_model_version=FixedQueryEncoder.version,
+                    embedding=vector_for("other" if case_id == "SDR-TEST-2" else "wheel"),
+                )
+            )
+
+
+async def hybrid_caller(encoder):
+    server = create_server(
+        database_url=os.environ["TEST_RAG_DATABASE_URL"],
+        jwt_secret="jwt-test-secret-" * 3,
+        cursor_secret="cursor-test-secret-" * 3,
+        encoder=FixedEncoder(),
+        sdr_encoder=encoder,
+    )
+    return ContractCheckingCaller(server)
