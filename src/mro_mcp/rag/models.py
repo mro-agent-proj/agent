@@ -1,4 +1,4 @@
-"""R01/R02/R03/R05 result items (MCP spec v1.0 section 5)."""
+"""R01/R02/R03/R04/R05 result items (MCP spec v1.0 section 5)."""
 
 from datetime import date
 from typing import Literal
@@ -62,6 +62,22 @@ class AmmItem(EvidenceFields):
     reported_jasc: JascCode | None
 
 
+class TechItem(EvidenceFields):
+    source_type: Literal["airbus_technical_article"]
+    locator: Locator
+    document_id: str
+    chunk_id: str
+    title: str = Field(description="문서 제목")
+    url: str = Field(description="원문 PDF 주소")
+    section: str | None
+    excerpt: str
+    applicability_status: Literal["supported", "conditional", "unknown"] = Field(
+        description="자료 적용 범위. unknown은 일반 적용 근거가 아니다"
+    )
+    applicability_basis: str | None = Field(description="적용 범위를 판단한 원문 문장")
+    configuration_conditions: list[str] = Field(max_length=30, description="구성·개조 조건 원문")
+
+
 class QuoteSpan(Model):
     start: int = Field(ge=0)
     end: int = Field(ge=0)
@@ -84,4 +100,5 @@ class EvidenceRecord(Model):
 JascResponse = ListResponse[JascItem]
 SdrResponse = ListResponse[SdrItem]
 AmmResponse = ListResponse[AmmItem]
+TechResponse = ListResponse[TechItem]
 EvidenceResponse = ItemResponse[EvidenceRecord]

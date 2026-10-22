@@ -1,4 +1,4 @@
-"""R01/R02/R03/R05 tool definitions. Inputs are Pydantic-validated; search.py does the work."""
+"""R01/R02/R03/R04/R05 tool definitions. Inputs are Pydantic-validated; search.py does the work."""
 
 from typing import Annotated, Literal
 
@@ -9,7 +9,7 @@ from ..common.app import McpServer
 from ..common.errors import ToolFailure
 from ..common.models import JascCode
 from .auth import principal
-from .models import AmmResponse, EvidenceResponse, JascResponse, SdrResponse
+from .models import AmmResponse, EvidenceResponse, JascResponse, SdrResponse, TechResponse
 from .search import RagSearch
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True)
@@ -145,10 +145,48 @@ def register(mcp: McpServer, search: RagSearch):
         return AmmResponse.model_validate(await run("search_amm_references", args))
 
     @mcp.tool(
+        name="search_technical_docs",
+        title="Airbus 공개 기술자료에서 계통 이해·추가 확인·부서 검토에 필요한 설명을 찾는다.",
+        description=(
+            "Airbus Safety First 정비 기사(공개 자료)에서 계통 동작·알려진 사례·점검 포인트 설명을 의미 검색으로 찾는다. "
+            "query는 한국어·영어 모두 된다(예: 'dual bleed loss', '브레이크 교차 연결'). "
+            "system_keywords(영어 계통·부품 단어)는 순위를 조금 올릴 뿐 필터가 아니다. "
+            "접수 기종군(예: A320 계열)을 다루거나 Airbus 전 기종에 해당하는 기사만 돌려준다. "
+            "기종이 명시되지 않은 문단(applicability_status=unknown)은 include_unknown_applicability=true일 때만 참고로 포함한다. "
+            "기사는 실제 정비 절차나 현재 기체의 적용성 확인이 아니다. 근거로 쓸 때는 evidence_id(EV-DOC-*)를 그대로 인용한다."
+        ),
+        annotations=READ_ONLY,
+    )
+    async def search_technical_docs(
+        request_id: RequestId,
+        context_version: ContextVersion,
+        query: Annotated[Text, Field(description="기술 설명 질의 (한국어·영어 의미 검색)")],
+        system_keywords: Annotated[
+            list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]],
+            Field(max_length=20, description="계통·부품 영어 키워드 (예: 'bleed', 'brake'). 순위 가중치일 뿐 필터가 아니다"),
+        ] = [],  # noqa: B006 - pydantic copies defaults
+        include_unknown_applicability: Annotated[
+            bool, Field(description="기종이 명시되지 않은 문단을 참고로 포함")
+        ] = False,
+        limit: Limit = 5,
+        cursor: Cursor = None,
+    ) -> TechResponse:
+        args = provided(
+            request_id=request_id,
+            context_version=context_version,
+            query=query,
+            system_keywords=system_keywords,
+            include_unknown_applicability=include_unknown_applicability,
+            limit=limit,
+            cursor=cursor,
+        )
+        return TechResponse.model_validate(await run("search_technical_docs", args))
+
+    @mcp.tool(
         name="get_evidence",
         title="검색에서 받은 SDR·AMM 참조·기술자료 근거의 원문 범위를 다시 확인한다.",
         description=(
-            "R02·R03에서 받은 evidence_id의 원문과 인용 위치를 다시 확인한다. 배정 근거로 인용하기 전에 쓴다. "
+            "R02·R03·R04에서 받은 evidence_id의 원문과 인용 위치를 다시 확인한다. 배정 근거로 인용하기 전에 쓴다. "
             "수리이력(MH-*)은 business-mcp의 get_aircraft_history로 확인한다."
         ),
         annotations=READ_ONLY,
@@ -157,7 +195,7 @@ def register(mcp: McpServer, search: RagSearch):
         request_id: RequestId,
         context_version: ContextVersion,
         evidence_id: Annotated[
-            str, Field(min_length=1, max_length=200, description="EV-SDR-* 또는 EV-AMM-*")
+            str, Field(min_length=1, max_length=200, description="EV-SDR-*, EV-AMM-* 또는 EV-DOC-*")
         ],
     ) -> EvidenceResponse:
         args = {"request_id": request_id, "context_version": context_version, "evidence_id": evidence_id}

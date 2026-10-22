@@ -4,18 +4,21 @@ import hashlib
 import json
 import os
 from importlib.resources import files
+from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
 import pytest
 import pytest_asyncio
 from jsonschema import Draft202012Validator, FormatChecker
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select, text
 
+from mro_mcp.rag import tech
 from mro_mcp.rag.local import LocalCaller
 from mro_mcp.rag.server import create_server
 from mro_rag import db
 from mro_rag.context import publish_context
+from mro_rag.embedding import MODEL_VERSION
 from mro_rag.ingest import ingest
 
 
@@ -229,7 +232,7 @@ def legacy_outputs():
     return {
         t["mcp"]["name"]: Draft202012Validator(t["mcp"]["outputSchema"], format_checker=FormatChecker())
         for t in catalog["tools"]
-        if t["id"] in {"R01", "R02", "R03", "R05"}
+        if t["id"] in {"R01", "R02", "R03", "R04", "R05"}
     }
 
 
@@ -254,3 +257,59 @@ async def make_context(owner, release_id, *, operator="TESTA", model="A320214", 
         )
     claims = {"run_id": run, "request_id": run, "context_version": 1, "sub": "alice", "tenant_id": "tenant-a"}
     return claims, {"request_id": run, "context_version": 1}
+
+
+TECH_DDL = Path(__file__).resolve().parent.parent / "integration/backend/V5__rag_tech_docs.sql"
+
+# Synthetic articles (not Airbus text): one per applicability case R04 must tell apart.
+TECH_ARTICLES = [
+    ("DOC-T-A320", "maintenance", "A320 wheel and brake vibration", "supported",
+     "This applies to the A320 Family.", [], "Wheel vibration during taxi is often traced to brake wear."),
+    ("DOC-T-FLEET", "maintenance", "Radio altimeter checks", "conditional",
+     "All Airbus aircraft are fitted with two radio altimeters.", ["Only aircraft with the new antenna"],
+     "Erroneous radio altimeter values after water ingress in the antenna."),
+    ("DOC-T-A330", "maintenance", "A330 wheel bleed leak", "supported",
+     "Applies to the A330.", [], "Wheel area bleed leak detection on the A330."),
+    ("DOC-T-NOTYPE", "maintenance", "Corrosion awareness", "unknown",
+     None, [], "Wheel well corrosion found during inspection."),
+    ("DOC-T-OPS", "flight_ops", "A320 wheel landing technique", "supported",
+     "A320 Family crews.", [], "Wheel landing technique in gusty wind."),
+]
+
+
+async def seed_tech(owner):
+    """Creates the Backend V5 tables once (the local Alembic chain has no R04) and reloads the articles."""
+    async with owner.begin() as conn:
+        if await conn.scalar(text("SELECT to_regclass('public.tech_documents')")) is None:
+            for statement in TECH_DDL.read_text().split(";\n"):
+                if any(line.strip() and not line.strip().startswith("--") for line in statement.splitlines()):
+                    await conn.exec_driver_sql(statement)
+        await conn.execute(delete(tech.embeddings))
+        await conn.execute(delete(tech.chunks))
+        await conn.execute(delete(tech.documents))
+        encoder = FixedEncoder()
+        for doc, category, title, status, basis, conditions, body in TECH_ARTICLES:
+            await conn.execute(
+                insert(tech.documents).values(
+                    document_id=doc, title=title, url=f"https://example.test/{doc}.pdf", published="June 2007",
+                    category=category, ata_chapters=[], departments=[], applicability_status=status,
+                    applicability_basis=basis, configuration_conditions=conditions, source_version=f"tech-test:{doc}",
+                    pdf_sha256="0" * 64, body_text=body,
+                )
+            )
+            embedding_text = f"{title} > Summary\n{body}"
+            await conn.execute(
+                insert(tech.chunks).values(
+                    chunk_id=f"{doc}-01", document_id=doc,
+                    evidence_id="EV-DOC-" + hashlib.md5(doc.encode()).hexdigest()[:20], evidence_group_id=doc,
+                    section="Summary", text=body, start_offset=0, end_offset=len(body), applicability_status=status,
+                    applicability_basis=basis, configuration_conditions=conditions, embedding_text=embedding_text,
+                    content_hash=hashlib.sha256(embedding_text.encode()).hexdigest(),
+                )
+            )
+            await conn.execute(
+                insert(tech.embeddings).values(
+                    chunk_id=f"{doc}-01", content_hash="test", embedding_model_version=MODEL_VERSION,
+                    embedding=encoder.encode([embedding_text])[0].tolist(),
+                )
+            )
