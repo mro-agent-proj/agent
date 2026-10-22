@@ -1,6 +1,6 @@
 """R04 search_technical_docs: family applicability, unknown handling, and R05 re-reading of EV-DOC-*."""
 
-from conftest import make_context, seed_tech
+from conftest import FixedQueryEncoder, hybrid_caller, make_context, seed_tech
 
 from mro_mcp.rag import tech
 
@@ -17,9 +17,14 @@ def test_family_applicability():
 
 
 async def test_technical_docs_scope_and_evidence(setup_db):
-    owner, _, svc, rid, _ = setup_db
+    owner, _, _, rid, _ = setup_db
     await seed_tech(owner)
     claims, args = await make_context(owner, rid, operator=None, model="A320214")
+    async with await hybrid_caller(FixedQueryEncoder()) as svc:
+        await check_scope_and_evidence(svc, owner, rid, claims, args)
+
+
+async def check_scope_and_evidence(svc, owner, rid, claims, args):
 
     result = await svc.invoke("search_technical_docs", dict(args, query="wheel vibration"), claims)
     assert result["status"] == "OK"
@@ -59,3 +64,15 @@ async def test_technical_docs_scope_and_evidence(setup_db):
     assert [item["document_id"] for item in other["items"]] == ["DOC-T-A330", "DOC-T-FLEET"]
     hidden = await svc.invoke("get_evidence", dict(other_args, evidence_id=first["evidence_id"]), other_claims)
     assert hidden["status"] == "NO_MATCH"
+
+
+async def test_technical_docs_fall_back_to_lexical(setup_db):
+    owner, _, plain, rid, _ = setup_db
+    await seed_tech(owner)
+    claims, args = await make_context(owner, rid, operator=None, model="A320214")
+    result = await plain.invoke("search_technical_docs", dict(args, query="wheel vibration"), claims)
+    assert result["status"] == "OK"
+    # Lexical match only: the A320 article names wheel and vibration, the fleet-wide radio altimeter one does not.
+    assert [i["document_id"] for i in result["items"]] == ["DOC-T-A320"]
+    assert result["items"][0]["score_kind"] == "lexical"
+    assert any(w.startswith("VECTOR_UNAVAILABLE: no query encoder") for w in result["warnings"])

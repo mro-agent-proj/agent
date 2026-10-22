@@ -107,38 +107,32 @@ def register(mcp: McpServer, search: RagSearch):
         name="search_amm_references",
         title="증상과 관련된 과거 AMM 인용 맥락을 찾아 담당 부서에 전달할 참고번호를 제공한다.",
         description=(
-            "SDR에 인용된 AMM 번호와 그 인용 맥락을 찾는다. query는 한국어·영어 의미 검색, "
-            "amm_reference_exact는 번호 정확 조회. 번호는 실제 매뉴얼 절차의 존재·적용성을 보장하지 않는다."
+            "AMM 번호(amm_reference_exact)로 그 번호가 인용된 SDR 문장과 인용 수준을 조회한다. "
+            "의미 검색은 하지 않는다(AMM은 판단 근거가 아니라 배정 후 참고 정보). 근거로 쓴 SDR의 AMM 번호는 "
+            "get_sdr_amm_references로 조회한다. 번호는 실제 매뉴얼 절차의 존재·적용성을 보장하지 않는다."
         ),
         annotations=READ_ONLY,
     )
     async def search_amm_references(
         request_id: RequestId,
         context_version: ContextVersion,
-        query: Annotated[Text | None, Field(description="증상·조치 맥락 질의 (의미 검색)")] = None,
         amm_reference_exact: Annotated[
-            Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)] | None,
+            str,
+            StringConstraints(strip_whitespace=True, min_length=1, max_length=300),
             Field(description="정확 조회할 AMM 번호 (예: 32-11-00)"),
-        ] = None,
-        candidate_jasc: CandidateJasc = [],  # noqa: B006 - pydantic copies defaults
+        ],
         reference_levels: Annotated[
             list[Literal["chapter_section", "subsection", "task_format"]],
             Field(max_length=3, description="인용 수준 필터"),
         ] = [],  # noqa: B006 - pydantic copies defaults
-        search_mode: SearchMode = "explore",
         limit: Limit = 5,
         cursor: Cursor = None,
     ) -> AmmResponse:
-        if query is None and amm_reference_exact is None:
-            raise ToolFailure("INVALID_ARGUMENT", "query or amm_reference_exact is required")
         args = provided(
             request_id=request_id,
             context_version=context_version,
-            query=query,
             amm_reference_exact=amm_reference_exact,
-            candidate_jasc=candidate_jasc,
             reference_levels=reference_levels,
-            search_mode=search_mode,
             limit=limit,
             cursor=cursor,
         )
@@ -173,7 +167,8 @@ def register(mcp: McpServer, search: RagSearch):
         name="search_technical_docs",
         title="Airbus 공개 기술자료에서 계통 이해·추가 확인·부서 검토에 필요한 설명을 찾는다.",
         description=(
-            "Airbus Safety First 정비 기사(공개 자료)에서 계통 동작·알려진 사례·점검 포인트 설명을 의미 검색으로 찾는다. "
+            "Airbus Safety First 정비 기사(공개 자료)에서 계통 동작·알려진 사례·점검 포인트 설명을 의미 검색(OpenAI 임베딩)으로 찾는다. "
+            "질의 임베딩을 쓸 수 없으면 영어 단어 검색으로 대신하고 VECTOR_UNAVAILABLE 경고를 붙인다. "
             "query는 한국어·영어 모두 된다(예: 'dual bleed loss', '브레이크 교차 연결'). "
             "system_keywords(영어 계통·부품 단어)는 순위를 조금 올릴 뿐 필터가 아니다. "
             "접수 기종군(예: A320 계열)을 다루거나 Airbus 전 기종에 해당하는 기사만 돌려준다. "

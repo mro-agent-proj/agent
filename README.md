@@ -38,8 +38,8 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 | B03 | `search_departments` | 정비 부서와 담당 ATA. JASC 후보 앞 두 자리로 순위만 조정 | `query`, `candidate_jasc` | `departments` 8 | - | AI 실행기: 단계마다 고정 확인 (도구 예산 제외) | 459 |
 | R01 | `search_jasc_codes` | JASC 코드 후보와 공식 명칭·정의 | `query`(영어) 또는 `codes` | `jasc_codes` 548 | - | LLM2·LLM3가 골라서 | 0 |
 | R02 | `search_sdr_cases` | 같은 기종의 SDR 사례. 단어 검색 + 의미 검색 하이브리드 (한국어 질의 가능) | `query`, `candidate_jasc`, `search_mode` | `sdr_cases` 71,741, `rag.sdr_embeddings` 71,741 | `EV-SDR-*` | LLM2·LLM3가 골라서 | 41 |
-| R03 | `search_amm_references` | SDR에 인용된 AMM 번호와 인용 맥락. 의미 검색 또는 번호 조회 | `query` 또는 `amm_reference_exact` | `amm_references` 35,396, `amm_chunks`·`rag.amm_embeddings` 31,678 | `EV-AMM-*` | LLM2·LLM3가 골라서 | 0 |
-| R04 | `search_technical_docs` | Airbus Safety First 정비 기사 의미 검색 (2026-10-22 추가) | `query`, `system_keywords`, `include_unknown_applicability` | `tech_documents` 61, `tech_chunks`·`rag.tech_embeddings` 496 | `EV-DOC-*` | LLM2·LLM3가 골라서 | 0 |
+| R03 | `search_amm_references` | AMM 번호로 그 번호가 인용된 SDR 문장 조회 (번호 조회만, 의미 검색은 V8에서 제거) | `amm_reference_exact` | `amm_references` 35,396 | `EV-AMM-*` | 쓰지 않음 (LLM 도구 목록에서 제외) | 0 |
+| R04 | `search_technical_docs` | Airbus Safety First 정비 기사 의미 검색 (OpenAI 임베딩, 2026-10-22 추가) | `query`, `system_keywords`, `include_unknown_applicability` | `tech_documents` 61, `tech_chunks`·`rag.tech_embeddings` 496 | `EV-DOC-*` | LLM2·LLM3가 골라서 | 0 |
 | R05 | `get_evidence` | R02·R03·R04에서 받은 근거의 원문과 인용 위치 재확인 | `evidence_id` | `evidence` 107,137, `tech_chunks` | 입력한 ID | LLM2·LLM3, 최종 근거 검증 | 73 |
 | 확장 | `get_sdr_amm_references` | 판단에 쓴 SDR 근거마다 그 원문에 인용된 AMM 번호와 인용 문장 조회 (2026-10-22 추가) | `evidence_ids`(EV-SDR-* 1~10개) | `evidence`, `amm_references` | `EV-AMM-*` | 배정 후 실행기 (LLM이 고르지 않음, 연결 예정) | - |
 
@@ -49,9 +49,9 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 - business-mcp: 2026-10-21 16:29부터
 - rag-mcp: 2026-10-21 17:26 ~ 2026-10-22 14:00 (KST)
 
-**AMM은 판단 근거가 아니라 배정 후 참고 정보로 다룹니다.** `get_sdr_amm_references`는 검색이 아니라 조회입니다. LLM2가 근거로 쓴 SDR에 딸린 AMM 번호를 정비팀 화면에 "참고 AMM"으로 붙이는 용도입니다. R03 `search_amm_references`는 팀 명세에 있는 도구라 호환을 위해 남겨 두었습니다. LLM2·LLM3 도구 목록에서 빼는 작업은 LLM 레포에서 따로 합니다. 확장 도구는 아직 `docs/spec-v1`에 없는 제안이라 팀 합의가 필요합니다.
+**AMM은 판단 근거가 아니라 배정 후 참고 정보로 다룹니다.** `get_sdr_amm_references`는 검색이 아니라 조회입니다. LLM2가 근거로 쓴 SDR에 딸린 AMM 번호를 정비팀 화면에 "참고 AMM"으로 붙이는 용도입니다. R03 `search_amm_references`는 팀 명세에 있는 도구라 이름은 남기되 **AMM 번호 조회만** 합니다(Backend V8에서 의미 검색용 `amm_chunks`·`amm_chunk_references`·`rag.amm_embeddings` 제거). LLM2·LLM3 도구 목록에서는 빠져 있습니다. R03 입력 축소와 확장 도구는 아직 `docs/spec-v1`에 없는 제안이라 팀 합의가 필요합니다(테스트의 `SPEC_DEVIATIONS`, `LOCAL_EXTENSIONS`).
 
-LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니다. 의미 검색(R03·R04)과 JASC 확인(R01)을 실제로 쓰게 하려면 LLM 레포 프롬프트의 도구 선택 기준을 보강해야 합니다.
+LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R04는 부르지 않습니다. 기술자료(R04)와 JASC 확인(R01)을 실제로 쓰게 하려면 LLM 레포 프롬프트의 도구 선택 기준을 보강해야 합니다.
 
 도구 제목과 입력 스키마는 `docs/spec-v1/mcp-tool-contracts.json`과 일치해야 하고, 응답은 같은 파일의 출력 스키마로 검증합니다(테스트가 확인). 도구 설명(description)은 AI가 도구를 고를 때 읽는 문구라서 검색 요령을 여기에 적습니다.
 
@@ -74,11 +74,10 @@ LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니�
     - 증상 영어 200: 59% → 74%
     - 증상 한국어 200: 28% → 64% (결과 없음 59건 → 0건)
   - **속도**: 질의당 중앙값 0.42초입니다.
-  - **임베딩 다시 만들기**: `scripts/embed_sdr_openai.py`가 비어 있는 행만 임베딩하고(약 $0.6), Backend 전달본(`data/rag-dump/sdr-embeddings_v1`)으로 묶습니다.
+  - **임베딩 다시 만들기**: `scripts/embed_openai.py`가 비어 있는 행만 임베딩하고(SDR 약 $0.6, 기술자료 1센트 미만), Backend 전달본(`sdr-embeddings_v1`, `airbus-safety-first_v2`, `sdr-jasc-amm_v2`)으로 묶습니다.
 - R02 기본 모드(`explore`)와 R01은 **단어가 하나라도 맞으면** 많이 맞는 순으로 돌려줍니다. R02 `search_mode="exact"`는 구절 그대로 찾습니다.
-- R03 질의는 `intfloat/multilingual-e5-small` 임베딩으로 의미 검색합니다(한국어 가능, CPU).
 - AMM 자료는 SDR에서 추출한 **참조번호와 인용 맥락**입니다. 실제 정비 매뉴얼 절차나 검증된 적용성이 아닙니다. 검색 점수는 진단 정확도나 정답 확률이 아닙니다.
-- R04는 Backend V5 테이블(`tech_documents`·`tech_chunks`·`rag.tech_embeddings`, Safety First 61편)을 R03과 같은 임베딩 모델로 의미 검색합니다. 규칙은 다음과 같습니다.
+- R04는 Backend V5·V8 테이블(`tech_documents`·`tech_chunks`·`rag.tech_embeddings`, Safety First 61편)을 R02와 같은 OpenAI 질의 임베딩으로 의미 검색합니다(키가 없으면 영어 단어 검색). 규칙은 다음과 같습니다.
   - **대상**: 정비(`maintenance`) 기사 23편만 검색합니다.
   - **기종군**: 접수 기종의 기종군(예: A320214 → A320 계열)이나 "all Airbus" 같은 전 기종을 언급한 기사만 돌려줍니다. 다른 기종군만 언급한 기사는 뺍니다.
   - **적용 범위 미상**: 기종을 언급하지 않은 기사와 `unknown` 문단은 `include_unknown_applicability=true`일 때만 참고로 포함합니다.
@@ -88,7 +87,7 @@ LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니�
 
 ## 실행 (backend와 함께)
 
-backend가 먼저 떠 있어야 합니다(Postgres, Flyway V1~V7, 시드, RAG·기술자료·SDR 임베딩 복원). 두 MCP는 backend의 Docker 네트워크(`backend_default`)에 붙습니다.
+backend가 먼저 떠 있어야 합니다(Postgres, Flyway V1~V8, 시드, RAG·기술자료·SDR 임베딩 복원). 두 MCP는 backend의 Docker 네트워크(`backend_default`)에 붙습니다.
 
 ```bash
 cp .env.mcp.example .env.mcp      # 값 채우기 (아래 표)
@@ -106,7 +105,8 @@ curl http://127.0.0.1:8101/health/ready && curl http://127.0.0.1:8102/health/rea
 | `RAG_OPENAI_API_KEY` | R02 하이브리드 질의 임베딩용 OpenAI 키. 비우면 단어 검색만 함 |
 | `BACKEND_NETWORK` | `backend_default` |
 
-- rag-mcp 이미지는 **CPU 전용 PyTorch**를 씁니다(약 2GB, 깨끗한 빌드 1분 안팎). 처음 시작할 때 고정 리비전의 임베딩 모델을 내려받아 `rag-model-cache` 볼륨에 보관하고, 모델을 미리 올린 뒤에 요청을 받습니다.
+- rag-mcp 이미지는 **로컬 임베딩 모델과 PyTorch 없이** 동작합니다(약 500MB, 바로 기동). 의미 검색(R02·R04)은 질의만 OpenAI로 임베딩합니다. 예전 `rag-model-cache` 볼륨은 더 쓰지 않으니 `docker volume rm mcp_rag-model-cache`로 지워도 됩니다.
+- 로컬 데이터 제작(`mro_rag`, `make embed`)은 이전 e5 파이프라인을 그대로 둡니다(`--extra embedding`). 전달본의 SDR·기술자료 임베딩은 `scripts/embed_openai.py`로 만듭니다.
 - 호스트 포트는 `127.0.0.1`에만 엽니다. 같은 Docker 네트워크 안에서는 `http://business-mcp:8101/mcp`, `http://rag-mcp:8102/mcp`로 접근합니다.
 - 이 Compose는 DB·RabbitMQ를 만들거나 DDL·데이터 적재를 하지 않습니다.
 
@@ -138,7 +138,7 @@ export TEST_DATABASE_URL=postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1
 export TEST_RAG_DATABASE_URL=postgresql+asyncpg://mro_reader:local-reader-only@127.0.0.1:55432/mro_test
 DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
 psql ... -f scripts/create_reader.sql
-uv run --extra dev pytest                     # 38개 + backend 실DB가 필요한 1개 skip
+uv run --extra dev pytest                     # 39개 + backend 실DB가 필요한 1개 skip
 ```
 
 테스트는 독립 합성 데이터를 만들어 실행하므로 원본 파일이 없어도 재현됩니다.

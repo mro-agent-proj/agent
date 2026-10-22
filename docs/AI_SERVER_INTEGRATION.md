@@ -35,11 +35,10 @@ ASGI 배포가 필요하면 `mro_mcp.business.server:create_app` 또는
 business-mcp에는 요청별 인증이 아직 없어 해당 네트워크는 신뢰된 서버만 연결해야 한다.
 네트워크 제한은 요청 권한 검증을 대체하지 않는다.
 
-RAG 이미지는 `embedding` 의존성을 포함하고, 첫 시작 시 고정된
-`intfloat/multilingual-e5-small` 리비전을 캐시에 내려받아 미리 로드한다.
-첫 호출에서 모델 다운로드·로딩이 발생해 AI의 MCP 10초 제한을 넘기는 일을 줄이기 위한 설정이다.
-모델 로딩 실패 시 서버 시작도 실패한다. 처음에는 외부 모델 다운로드 접근이 필요하며,
-가중치는 `rag-model-cache` 볼륨에 보관한다. DB 데이터나 새 임베딩을 생성하지 않는다.
+RAG 이미지는 로컬 임베딩 모델(PyTorch)을 포함하지 않는다(Backend V8 이후). R02·R04 의미 검색은
+`RAG_OPENAI_API_KEY`로 질의만 OpenAI `text-embedding-3-large`(1024차원)로 임베딩한다. 키가 없거나 호출이
+실패하면 단어 검색으로 대신하고 `VECTOR_UNAVAILABLE` 경고를 붙인다. 문서 임베딩은 Backend 전달본으로 복원되며
+rag-mcp는 DB 데이터나 새 임베딩을 생성하지 않는다. 로컬 측정에서 R02 질의 시간은 중앙값 0.42초였다.
 실제 검색 시간이 10초 이내라는 보장은 별도 성능 검증이 필요하다.
 
 ## AI 환경 설정

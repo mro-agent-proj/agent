@@ -1,6 +1,6 @@
 """R04 Airbus Safety First tables and model-family applicability.
 
-The tables come from Backend Flyway V5 (integration/backend/V5__rag_tech_docs.sql), not from the local
+The tables come from Backend Flyway V5/V8 (integration/backend/V5, V8), not from the local
 Alembic chain, so they live in their own MetaData and never enter mro_rag.db migrations.
 """
 
@@ -58,7 +58,7 @@ embeddings = Table(
     Column("chunk_id", Text, primary_key=True),
     Column("content_hash", Text),
     Column("embedding_model_version", Text),
-    Column("embedding", Vector(384)),
+    Column("embedding", Vector(1024)),  # OpenAI text-embedding-3-large@1024 since Backend V8
     schema="rag",
 )
 

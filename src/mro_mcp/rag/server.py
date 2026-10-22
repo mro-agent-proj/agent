@@ -12,16 +12,16 @@ from .search import RagSearch
 DEFAULT_HOSTS = "127.0.0.1:*,localhost:*,testserver"
 
 
-def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encoder=None, sdr_encoder=None):
+def create_server(database_url=None, jwt_secret=None, cursor_secret=None, query_encoder=None):
     jwt_secret = jwt_secret or os.environ["RAG_JWT_SECRET"]
     cursor_secret = cursor_secret or os.environ["RAG_CURSOR_SECRET"]
     if min(len(jwt_secret), len(cursor_secret)) < 32 or jwt_secret == cursor_secret:
         raise ValueError("Use distinct JWT/cursor secrets with at least 32 characters each")
     database = ReadOnlyDatabase(database_url or os.environ["RAG_DATABASE_URL"], schemas=("public", "rag"))
-    if sdr_encoder is None and os.environ.get("RAG_OPENAI_API_KEY"):
-        # R02 hybrid: the query must use the model the SDR documents were embedded with (Backend V7).
-        sdr_encoder = OpenAIQueryEncoder(os.environ["RAG_OPENAI_API_KEY"])
-    search = RagSearch(database, cursor_secret, encoder, sdr_encoder)
+    if query_encoder is None and os.environ.get("RAG_OPENAI_API_KEY"):
+        # R02/R04 semantic search: queries use the model the documents were embedded with (Backend V7/V8).
+        query_encoder = OpenAIQueryEncoder(os.environ["RAG_OPENAI_API_KEY"])
+    search = RagSearch(database, cursor_secret, query_encoder)
     mcp = McpServer(
         "mro-rag",
         database=database,
@@ -31,7 +31,6 @@ def create_server(database_url=None, jwt_secret=None, cursor_secret=None, encode
         allowed_hosts=os.environ.get("RAG_ALLOWED_HOSTS", DEFAULT_HOSTS).split(","),
         instructions="JASC 코드표, SDR 사례, SDR에 인용된 AMM 참조, Airbus 공개 기술자료와 근거 원문을 조회하는 읽기 전용 도구입니다.",
         http_middleware=[auth.middleware(jwt_secret)],
-        startup=search.preload_encoder if os.environ.get("RAG_PRELOAD_ENCODER", "false").lower() == "true" else None,
     )
     tools.register(mcp, search)
     return mcp

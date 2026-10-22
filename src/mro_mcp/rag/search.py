@@ -4,7 +4,6 @@ Moved from mro_rag/service.py: input/output validation and error envelopes now l
 queries, scoping, cursors and ranking are unchanged.
 """
 
-import asyncio
 import base64
 import hashlib
 import hmac
@@ -16,12 +15,12 @@ from datetime import UTC, date, datetime
 from sqlalchemy import and_, case, false, func, select, text
 
 from mro_rag import db
-from mro_rag.embedding import CONFIG, MODEL_VERSION, LocalEncoder
 from mro_rag.ingest import json_hash
 
 from ..common.db import ReadOnlyDatabase
 from ..common.errors import ToolFailure
 from . import sdr_vectors, tech
+from .sdr_vectors import MODEL_VERSION
 
 CARRIED = ("applied_scope", "snapshot_ids", "counts", "warnings")
 
@@ -61,19 +60,12 @@ def any_word_tsquery(text):
 
 
 class RagSearch:
-    def __init__(self, database: ReadOnlyDatabase, cursor_secret, encoder=None, sdr_encoder=None):
+    def __init__(self, database: ReadOnlyDatabase, cursor_secret, query_encoder=None):
         if len(cursor_secret) < 32:
             raise ValueError("Cursor secret must be at least 32 characters")
-        self.database, self.secret, self.encoder = database, cursor_secret.encode(), encoder
-        self.sdr_encoder = sdr_encoder  # R02 semantic half; None means lexical only
-        self.encode_lock = asyncio.Lock()
-
-    async def preload_encoder(self):
-        """Load the pinned model before accepting calls with a ten-second client timeout."""
-        async with self.encode_lock:
-            if self.encoder is None:
-                self.encoder = await asyncio.to_thread(LocalEncoder)
-            await asyncio.to_thread(self.encoder.encode, ["maintenance"], query=True)
+        self.database, self.secret = database, cursor_secret.encode()
+        # One OpenAI query encoder for every semantic search (R02 SDR, R04 articles); None means lexical only.
+        self.query_encoder = query_encoder
 
     async def run(self, name, args, claims):
         """Returns the response dict for one tool call; raises ToolFailure for caller-actionable outcomes."""
@@ -293,7 +285,7 @@ class RagSearch:
 
     async def sdr_vector_ready(self, conn, ctx, out):
         """Semantic half only when documents were embedded with the encoder this server queries with."""
-        if self.sdr_encoder is None:
+        if self.query_encoder is None:
             out["warnings"].append("VECTOR_UNAVAILABLE: no query encoder configured; lexical ranking only")
             return False
         if await conn.scalar(text("SELECT to_regclass('rag.sdr_embeddings')")) is None:
@@ -302,7 +294,7 @@ class RagSearch:
         e = sdr_vectors.embeddings
         ready = await conn.scalar(
             select(e.c.sdr_case_uuid)
-            .where(e.c.release_id == ctx["release_id"], e.c.embedding_model_version == self.sdr_encoder.version)
+            .where(e.c.release_id == ctx["release_id"], e.c.embedding_model_version == self.query_encoder.version)
             .limit(1)
         )
         if ready is None:
@@ -325,7 +317,7 @@ class RagSearch:
         vector = None
         if args.get("search_mode") != "exact" and await self.sdr_vector_ready(conn, ctx, out):
             try:
-                vector = await self.sdr_encoder.encode(args["query"])
+                vector = await self.query_encoder.encode(args["query"])
             except Exception as exc:  # noqa: BLE001 - the lexical half still answers
                 out["warnings"].append(f"VECTOR_UNAVAILABLE: query embedding failed ({type(exc).__name__})")
         if vector is None:
@@ -412,7 +404,7 @@ class RagSearch:
                 .select_from(
                     db.sdr.join(e, and_(e.c.sdr_case_uuid == db.sdr.c.id, e.c.release_id == db.sdr.c.release_id))
                 )
-                .where(*self.scope(ctx), e.c.embedding_model_version == self.sdr_encoder.version)
+                .where(*self.scope(ctx), e.c.embedding_model_version == self.query_encoder.version)
                 .order_by(similarity.desc(), db.sdr.c.case_id)
                 .limit(pool)
             )
@@ -431,13 +423,6 @@ class RagSearch:
         }
         return [{**found[i], "rank": fused[i]} for i in ordered]
 
-    async def query_vector(self, query):
-        async with self.encode_lock:
-            if self.encoder is None:
-                self.encoder = await asyncio.to_thread(LocalEncoder)
-            result = await asyncio.to_thread(self.encoder.encode, [query], query=True)
-            return result[0]
-
     async def amm_search(self, conn, ctx, args, out):
         source = db.amm.join(
             db.sdr, and_(db.sdr.c.id == db.amm.c.sdr_case_uuid, db.sdr.c.release_id == db.amm.c.release_id)
@@ -453,45 +438,9 @@ class RagSearch:
             number = re.sub(r"\s*[-.–—]\s*", "-", args["amm_reference_exact"].strip()).upper()
             filters.append(db.amm.c.cited_amm_ref_normalized == number)
         offset = self.page_offset("search_amm_references", ctx, args)
-        if "query" in args:
-            index = await self.ready_index(conn, ctx, "derived_amm", "VECTOR")
-            if index["config"] != CONFIG:
-                raise ToolFailure(
-                    "INDEX_VERSION_UNAVAILABLE",
-                    "Server encoder does not match the pinned embedding configuration",
-                )
-            vector = await self.query_vector(args["query"])
-            score = 1 - db.embeddings.c.embedding.cosine_distance(vector)
-            source = source.join(
-                db.links,
-                and_(db.links.c.reference_uuid == db.amm.c.id, db.links.c.release_id == ctx["release_id"]),
-            )
-            source = source.join(
-                db.embeddings,
-                and_(
-                    db.embeddings.c.chunk_uuid == db.links.c.chunk_uuid,
-                    db.embeddings.c.index_uuid == index["id"],
-                    db.embeddings.c.release_id == ctx["release_id"],
-                ),
-            )
-            boost = case((db.sdr.c.reported_jasc.in_(args.get("candidate_jasc", [])), 0.03), else_=0.0)
-            ranks = (
-                select(db.amm.c.id.label("ref_id"), func.max(score + boost).label("rank"))
-                .select_from(source)
-                .where(*filters)
-                .group_by(db.amm.c.id)
-                .subquery()
-            )
-            query = (
-                select(db.amm, ranks.c.rank)
-                .join(ranks, ranks.c.ref_id == db.amm.c.id)
-                .order_by(ranks.c.rank.desc(), db.amm.c.distilled_record_id)
-            )
-            kind = "fusion" if args.get("candidate_jasc") else "vector"
-        else:
-            await self.ready_index(conn, ctx, "derived_amm", "EXACT")
-            query = select(db.amm).select_from(source).where(*filters).order_by(db.amm.c.distilled_record_id)
-            kind = "exact"
+        # Number lookup only: AMM is a handoff reference, so the semantic search over citation chunks is gone (V8).
+        await self.ready_index(conn, ctx, "derived_amm", "EXACT")
+        query = select(db.amm).select_from(source).where(*filters).order_by(db.amm.c.distilled_record_id)
         rows = (await conn.execute(query.offset(offset).limit(args["limit"] + 1))).mappings().all()
         selected = self.finish_page("search_amm_references", ctx, args, out, rows, offset)
         for row in selected:
@@ -520,8 +469,8 @@ class RagSearch:
             }
             item.update(
                 locator=locator(p["locator"]),
-                score=float(row["rank"]) if "query" in args else None,
-                score_kind=kind,
+                score=None,
+                score_kind="exact",
             )
             out["items"].append(item)
         if selected:
@@ -625,18 +574,31 @@ class RagSearch:
             eligible.append(c.c.applicability_status.in_(("supported", "conditional")))
         out["counts"]["scope_count"] = await conn.scalar(select(func.count()).select_from(c).where(in_scope))
         out["counts"]["eligible_count"] = await conn.scalar(select(func.count()).select_from(c).where(*eligible))
-        vector = await self.query_vector(args["query"])
-        score = 1 - e.c.embedding.cosine_distance(vector)
         keywords = args.get("system_keywords", [])
-        if keywords:
-            score = score + case(
-                (c.c.search_document.op("@@")(any_word_tsquery(" ".join(keywords))), 0.03), else_=0.0
-            )
-        score = score.label("rank")
-        offset = self.page_offset("search_technical_docs", ctx, args)
-        source = c.join(d, d.c.document_id == c.c.document_id).join(
-            e, and_(e.c.chunk_id == c.c.chunk_id, e.c.embedding_model_version == MODEL_VERSION)
+        bonus = (
+            case((c.c.search_document.op("@@")(any_word_tsquery(" ".join(keywords))), 0.03), else_=0.0)
+            if keywords
+            else 0.0
         )
+        vector = None
+        if self.query_encoder is None:
+            out["warnings"].append("VECTOR_UNAVAILABLE: no query encoder configured; lexical ranking only")
+        else:
+            try:
+                vector = await self.query_encoder.encode(args["query"])
+            except Exception as exc:  # noqa: BLE001 - the lexical ranking still answers
+                out["warnings"].append(f"VECTOR_UNAVAILABLE: query embedding failed ({type(exc).__name__})")
+        source = c.join(d, d.c.document_id == c.c.document_id)
+        if vector is not None:
+            score = (1 - e.c.embedding.cosine_distance(vector) + bonus).label("rank")
+            source = source.join(e, and_(e.c.chunk_id == c.c.chunk_id, e.c.embedding_model_version == MODEL_VERSION))
+            kind = "fusion" if keywords else "vector"
+        else:
+            ts = any_word_tsquery(" ".join([args["query"], *keywords]))
+            score = (func.ts_rank_cd(c.c.search_document, ts) + bonus).label("rank")
+            eligible.append(c.c.search_document.op("@@")(ts))
+            kind = "lexical"
+        offset = self.page_offset("search_technical_docs", ctx, args)
         rows = (
             (
                 await conn.execute(
@@ -663,7 +625,7 @@ class RagSearch:
                     "locator": self.tech_locator(row),
                     "quote": row["text"],
                     "score": float(row["rank"]),
-                    "score_kind": "fusion" if keywords else "vector",
+                    "score_kind": kind,
                     "document_id": row["document_id"],
                     "chunk_id": row["chunk_id"],
                     "title": row["title"],
