@@ -223,7 +223,8 @@ class ContractCheckingCaller(LocalCaller):
 
     async def invoke(self, name, args, claims):
         result = await super().invoke(name, args, claims)
-        LEGACY_OUTPUTS[name].validate(result)
+        if name in LEGACY_OUTPUTS:  # local extensions are checked by their Pydantic models only
+            LEGACY_OUTPUTS[name].validate(result)
         return result
 
 

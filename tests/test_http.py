@@ -91,7 +91,7 @@ async def test_streamable_http_tool_contract_and_authorization(setup_db, tmp_pat
         ):
             await session.initialize()
             listed = await session.list_tools()
-            assert len(listed.tools) == 5
+            assert len(listed.tools) == 6
             assert all(t.annotations.readOnlyHint for t in listed.tools)
             r = await session.call_tool("search_jasc_codes", dict(args, codes=["3210"]))
             assert not r.isError and r.structuredContent["status"] == "OK"

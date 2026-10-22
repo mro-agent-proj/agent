@@ -1,6 +1,6 @@
 # MRO 정비 근거 MCP (business-mcp · rag-mcp)
 
-AI 서버가 정비 요청을 판단할 때 쓰는 **읽기 전용 MCP 서버 두 개(도구 8개)**와, 그 근거 데이터(SDR 사례·AMM 참조·JASC)를 만드는 적재 도구입니다.
+AI 서버가 정비 요청을 판단할 때 쓰는 **읽기 전용 MCP 서버 두 개(도구 9개)**와, 그 근거 데이터(SDR 사례·AMM 참조·JASC)를 만드는 적재 도구입니다.
 Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. 업무 상태를 바꾸거나 LLM을 실행하지 않습니다.
 
 ## 전체 구성에서의 위치
@@ -29,7 +29,7 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 
 두 서버 모두 읽기 전용이고, 업무 상태를 바꾸거나 LLM을 실행하지 않습니다. 쓰기 도구(B04~B06, R06)는 등록하지 않습니다.
 
-### 도구 8개
+### 도구 9개
 
 | ID | 도구 | 하는 일 | 주요 입력 | 읽는 데이터 | 근거 ID | 누가 부르나 | AI 실제 호출 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -41,12 +41,15 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 | R03 | `search_amm_references` | SDR에 인용된 AMM 번호와 인용 맥락. 의미 검색 또는 번호 조회 | `query` 또는 `amm_reference_exact` | `amm_references` 35,396, `amm_chunks`·`rag.amm_embeddings` 31,678 | `EV-AMM-*` | LLM2·LLM3가 골라서 | 0 |
 | R04 | `search_technical_docs` | Airbus Safety First 정비 기사 의미 검색 (2026-10-22 추가) | `query`, `system_keywords`, `include_unknown_applicability` | `tech_documents` 61, `tech_chunks`·`rag.tech_embeddings` 496 | `EV-DOC-*` | LLM2·LLM3가 골라서 | 0 |
 | R05 | `get_evidence` | R02·R03·R04에서 받은 근거의 원문과 인용 위치 재확인 | `evidence_id` | `evidence` 107,137, `tech_chunks` | 입력한 ID | LLM2·LLM3, 최종 근거 검증 | 73 |
+| 확장 | `get_sdr_amm_references` | 판단에 쓴 SDR 근거마다 그 원문에 인용된 AMM 번호와 인용 문장 조회 (2026-10-22 추가) | `evidence_ids`(EV-SDR-* 1~10개) | `evidence`, `amm_references` | `EV-AMM-*` | 배정 후 실행기 (LLM이 고르지 않음, 연결 예정) | - |
 
 모든 도구는 `request_id`(토큰과 같아야 함)를 받고, rag-mcp 도구는 `context_version`도 받습니다. 검색 도구는 `limit`과 `cursor`로 페이지를 넘깁니다.
 
 **AI 실제 호출**은 서버 로그의 호출 수입니다. 시나리오 평가·시연 실행이 들어 있고, 직접 테스트한 호출은 뺐습니다.
 - business-mcp: 2026-10-21 16:29부터
 - rag-mcp: 2026-10-21 17:26 ~ 2026-10-22 14:00 (KST)
+
+**AMM은 판단 근거가 아니라 배정 후 참고 정보로 다룹니다.** `get_sdr_amm_references`는 검색이 아니라 조회입니다. LLM2가 근거로 쓴 SDR에 딸린 AMM 번호를 정비팀 화면에 "참고 AMM"으로 붙이는 용도입니다. R03 `search_amm_references`는 팀 명세에 있는 도구라 호환을 위해 남겨 두었습니다. LLM2·LLM3 도구 목록에서 빼는 작업은 LLM 레포에서 따로 합니다. 확장 도구는 아직 `docs/spec-v1`에 없는 제안이라 팀 합의가 필요합니다.
 
 LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R03·R04는 부르지 않습니다. 의미 검색(R03·R04)과 JASC 확인(R01)을 실제로 쓰게 하려면 LLM 레포 프롬프트의 도구 선택 기준을 보강해야 합니다.
 
@@ -124,7 +127,7 @@ export TEST_DATABASE_URL=postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1
 export TEST_RAG_DATABASE_URL=postgresql+asyncpg://mro_reader:local-reader-only@127.0.0.1:55432/mro_test
 DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
 psql ... -f scripts/create_reader.sql
-uv run --extra dev pytest                     # 35개 + backend 실DB가 필요한 1개 skip
+uv run --extra dev pytest                     # 36개 + backend 실DB가 필요한 1개 skip
 ```
 
 테스트는 독립 합성 데이터를 만들어 실행하므로 원본 파일이 없어도 재현됩니다.
