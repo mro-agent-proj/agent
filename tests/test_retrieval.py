@@ -1,17 +1,20 @@
 import json
 
 import pytest
-from conftest import FixedEncoder, make_context
+from conftest import make_context
 from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from mro_mcp.rag.server import create_server
 from mro_rag import db
-from mro_rag.embedding import build_embeddings
 from mro_rag.ingest import ingest, load_package
 
 # Proposed to the team, not yet in docs/spec-v1: the SDR -> AMM handoff lookup.
 LOCAL_EXTENSIONS = {"get_sdr_amm_references"}
+# Proposed spec change (Backend V8): R03 is a number lookup only, the semantic query and its ranking inputs are gone.
+SPEC_DEVIATIONS = {
+    "search_amm_references": {"removed": {"query", "candidate_jasc", "search_mode"}, "required": {"amm_reference_exact"}}
+}
 
 
 async def test_tools_are_read_only_and_named_as_spec():
@@ -36,8 +39,13 @@ async def test_tools_are_read_only_and_named_as_spec():
         if name in LOCAL_EXTENSIONS:
             continue
         assert tool.title == documented[name]["title"]
-        assert set(tool.inputSchema["properties"]) == set(documented[name]["inputSchema"]["properties"])
-        assert set(tool.inputSchema.get("required", [])) == set(documented[name]["inputSchema"]["required"])
+        properties = set(documented[name]["inputSchema"]["properties"])
+        required = set(documented[name]["inputSchema"]["required"])
+        if name in SPEC_DEVIATIONS:
+            properties -= SPEC_DEVIATIONS[name]["removed"]
+            required |= SPEC_DEVIATIONS[name]["required"]
+        assert set(tool.inputSchema["properties"]) == properties
+        assert set(tool.inputSchema.get("required", [])) == required
 
 
 def test_source_tampering_rejected(package):
@@ -186,37 +194,15 @@ async def test_amm_number_not_unique_and_quote_roundtrip(setup_db):
         assert evidence["result"]["parent_source_ids"] == [item["source_case_id"]]
 
 
-async def test_vector_index_pinned_and_scoped(setup_db):
-    owner, _, svc, rid, release_key = setup_db
+async def test_amm_references_are_number_lookup_only(setup_db):
+    """V8: AMM is a handoff reference; the semantic search over citation chunks is gone."""
+    owner, _, svc, rid, _ = setup_db
     claims, args = await make_context(owner, rid)
-    # Explicitly emulate a run started before vector readiness even on a repeated test run.
-    async with owner.begin() as c:
-        keys = (
-            (
-                await c.execute(
-                    select(db.indexes.c.index_key).where(
-                        db.indexes.c.release_id == rid, db.indexes.c.method != "VECTOR"
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        await c.execute(
-            update(db.contexts).where(db.contexts.c.run_id == claims["run_id"]).values(index_ids=list(keys))
-        )
-    missing = await svc.invoke("search_amm_references", dict(args, query="wheel vibration"), claims)
-    assert missing["error"]["code"] == "INDEX_NOT_READY"
-    await build_embeddings(owner, release_key, FixedEncoder())
-    still_pinned = await svc.invoke("search_amm_references", dict(args, query="wheel vibration"), claims)
-    assert still_pinned["error"]["code"] == "INDEX_NOT_READY"
-    fresh, a2 = await make_context(owner, rid)
-    result = await svc.invoke(
-        "search_amm_references", dict(a2, query="wheel vibration", amm_reference_exact="32-11-00"), fresh
-    )
-    assert result["status"] == "OK" and len(result["items"]) == 2
-    assert all(r["score"] > 0.99 for r in result["items"])
-    assert all(r["source_case_id"] != "SDR-TEST-3" for r in result["items"])
+    semantic = await svc.invoke("search_amm_references", dict(args, query="wheel vibration"), claims)
+    assert semantic["status"] == "ERROR"
+    exact = await svc.invoke("search_amm_references", dict(args, amm_reference_exact="32-11-00"), claims)
+    assert exact["status"] == "OK" and {r["score_kind"] for r in exact["items"]} == {"exact"}
+    assert all(r["source_case_id"] != "SDR-TEST-3" for r in exact["items"])  # operator scope still applies
 
 
 async def test_db_readonly_and_cross_parent_fk(setup_db):

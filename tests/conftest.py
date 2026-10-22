@@ -18,7 +18,6 @@ from mro_mcp.rag.local import LocalCaller
 from mro_mcp.rag.server import create_server
 from mro_rag import db
 from mro_rag.context import publish_context
-from mro_rag.embedding import MODEL_VERSION
 from mro_rag.ingest import ingest
 
 
@@ -210,7 +209,6 @@ async def setup_db(package):
         database_url=os.environ["TEST_RAG_DATABASE_URL"],
         jwt_secret="jwt-test-secret-" * 3,
         cursor_secret="cursor-test-secret-" * 3,
-        encoder=FixedEncoder(),
     )
     async with ContractCheckingCaller(server) as service:
         yield owner, reader, service, release_id, result["release_key"]
@@ -261,6 +259,14 @@ async def make_context(owner, release_id, *, operator="TESTA", model="A320214", 
 
 
 TECH_DDL = Path(__file__).resolve().parent.parent / "integration/backend/V5__rag_tech_docs.sql"
+V8_DDL = Path(__file__).resolve().parent.parent / "integration/backend/V8__drop_amm_semantic_openai_tech.sql"
+
+
+def sql_statements(path, only=None):
+    for statement in path.read_text().split(";\n"):
+        has_sql = any(line.strip() and not line.strip().startswith("--") for line in statement.splitlines())
+        if has_sql and (only is None or only in statement):
+            yield statement
 
 # Synthetic articles (not Airbus text): one per applicability case R04 must tell apart.
 TECH_ARTICLES = [
@@ -282,13 +288,15 @@ async def seed_tech(owner):
     """Creates the Backend V5 tables once (the local Alembic chain has no R04) and reloads the articles."""
     async with owner.begin() as conn:
         if await conn.scalar(text("SELECT to_regclass('public.tech_documents')")) is None:
-            for statement in TECH_DDL.read_text().split(";\n"):
-                if any(line.strip() and not line.strip().startswith("--") for line in statement.splitlines()):
-                    await conn.exec_driver_sql(statement)
+            for statement in sql_statements(TECH_DDL):
+                await conn.exec_driver_sql(statement)
+            # V8 replaces the e5 embeddings with OpenAI 1024-d ones. Its AMM drops are not applied here: the
+            # local Alembic chain (used to build test data) still has those tables.
+            for statement in sql_statements(V8_DDL, only="tech_embeddings"):
+                await conn.exec_driver_sql(statement)
         await conn.execute(delete(tech.embeddings))
         await conn.execute(delete(tech.chunks))
         await conn.execute(delete(tech.documents))
-        encoder = FixedEncoder()
         for doc, category, title, status, basis, conditions, body in TECH_ARTICLES:
             await conn.execute(
                 insert(tech.documents).values(
@@ -310,8 +318,8 @@ async def seed_tech(owner):
             )
             await conn.execute(
                 insert(tech.embeddings).values(
-                    chunk_id=f"{doc}-01", content_hash="test", embedding_model_version=MODEL_VERSION,
-                    embedding=encoder.encode([embedding_text])[0].tolist(),
+                    chunk_id=f"{doc}-01", content_hash="test", embedding_model_version=FixedQueryEncoder.version,
+                    embedding=vector_for(embedding_text),
                 )
             )
 
@@ -366,7 +374,6 @@ async def hybrid_caller(encoder):
         database_url=os.environ["TEST_RAG_DATABASE_URL"],
         jwt_secret="jwt-test-secret-" * 3,
         cursor_secret="cursor-test-secret-" * 3,
-        encoder=FixedEncoder(),
-        sdr_encoder=encoder,
+        query_encoder=encoder,
     )
     return ContractCheckingCaller(server)
