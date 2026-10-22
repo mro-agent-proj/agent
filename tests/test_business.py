@@ -186,8 +186,9 @@ async def test_input_errors_use_the_spec_envelope(offline_server, name, args, co
 
 DB_URL = os.environ.get("BUSINESS_TEST_DATABASE_URL")
 DB_REQUEST = os.environ.get("BUSINESS_TEST_REQUEST_ID")
+DB_RUN = os.environ.get("BUSINESS_TEST_RUN_ID")  # an active rag_request_contexts row for DB_REQUEST (Backend V9 view)
 needs_db = pytest.mark.skipif(
-    not (DB_URL and DB_REQUEST), reason="BUSINESS_TEST_DATABASE_URL/REQUEST_ID not set"
+    not (DB_URL and DB_REQUEST and DB_RUN), reason="BUSINESS_TEST_DATABASE_URL/REQUEST_ID/RUN_ID not set"
 )
 
 
@@ -201,16 +202,22 @@ async def server():
 
 @needs_db
 async def test_seeded_db_round_trip(server):
-    context = (await call(server, "get_request_context", {"request_id": DB_REQUEST})).structuredContent
+    run_claims = {**claims_for(DB_REQUEST), "run_id": DB_RUN}
+    context = (await call(server, "get_request_context", {"request_id": DB_REQUEST}, run_claims)).structuredContent
     assert context["status"] == "OK", context["error"]
-    assert context["result"]["resolved_scope"]["model_key"]
+    # B01 returns the scope the backend registered for this run, the same row rag-mcp pins.
+    scope = context["result"]["resolved_scope"]
+    assert scope["model_key"] and scope["model_filter_applied"] is True
+    assert context["context_version"] == context["result"]["context_version"] == run_claims["context_version"]
+    revoked = await call(server, "get_request_context", {"request_id": DB_REQUEST}, {**run_claims, "run_id": "no-such-run"})
+    assert revoked.isError and revoked.structuredContent["error"]["code"] == "FORBIDDEN"
 
     args = {"request_id": DB_REQUEST, "context_version": context["context_version"], "limit": 2}
-    first = (await call(server, "get_aircraft_history", args)).structuredContent
+    first = (await call(server, "get_aircraft_history", args, run_claims)).structuredContent
     assert first["status"] in {"OK", "NO_DATA"}
     if first["next_cursor"]:
         second = (
-            await call(server, "get_aircraft_history", {**args, "cursor": first["next_cursor"]})
+            await call(server, "get_aircraft_history", {**args, "cursor": first["next_cursor"]}, run_claims)
         ).structuredContent
         assert {i["history_id"] for i in first["items"]}.isdisjoint(i["history_id"] for i in second["items"])
 
@@ -221,7 +228,10 @@ async def test_seeded_db_round_trip(server):
     )
     assert departments.structuredContent["items"][0]["department_id"] == "HYD"
     missing = await call(
-        server, "get_request_context", {"request_id": "00000000-0000-4000-8000-000000000000"}
+        server,
+        "get_request_context",
+        {"request_id": "00000000-0000-4000-8000-000000000000"},
+        {**run_claims, "request_id": "00000000-0000-4000-8000-000000000000"},
     )
     assert missing.isError and missing.structuredContent["error"]["code"] == "NOT_FOUND"
 

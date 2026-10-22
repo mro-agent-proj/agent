@@ -24,7 +24,7 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 
 | 서버 | 주소 | DB 계정 | 읽는 데이터 | 토큰 aud |
 | --- | --- | --- | --- | --- |
-| business-mcp | `:8101/mcp` | `mro_business_reader` | 업무 테이블: `repair_requests`, `aircraft`, `maintenance_history`, `departments` | `mro-business` |
+| business-mcp | `:8101/mcp` | `mro_business_reader` | Backend AI용 뷰 `agent_request_context`·`agent_run_context`(V9), `maintenance_history`, `departments` | `mro-business` |
 | rag-mcp | `:8102/mcp` | `mro_reader` | RAG(Backend V3): `jasc_codes`, `sdr_cases`, `amm_*`, `evidence`, `knowledge_*` · 기술자료(Backend V5): `tech_*` · 실행 범위 `rag_request_contexts` | `mro-rag` |
 
 두 서버 모두 읽기 전용이고, 업무 상태를 바꾸거나 LLM을 실행하지 않습니다. 쓰기 도구(B04~B06, R06)는 등록하지 않습니다.
@@ -33,7 +33,7 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 
 | ID | 도구 | 하는 일 | 주요 입력 | 읽는 데이터 | 근거 ID | 누가 부르나 | AI 실제 호출 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| B01 | `get_request_context` | 접수 내용·기체·현재 상태, 검색 범위(`model_key`)와 `context_version` | `request_id` | `repair_requests`, `aircraft` | - | AI 실행기: 단계마다 고정 확인 | 461 |
+| B01 | `get_request_context` | 접수 내용·현재 상태와, backend가 이 실행에 등록한 **실제 검색 범위**(`context_version`·`model_key`·운항사·고정 조건). rag-mcp와 같은 범위 | `request_id` | 뷰 `agent_request_context`, `agent_run_context` (V9) | - | AI 실행기: 시작·최종 확정 직전 | 461 |
 | B02 | `get_aircraft_history` | 같은 기체의 이전 수리이력. 접수 시각 이전만 | `occurred_from`·`occurred_to`, `limit` | `maintenance_history` 1,577 | `MH-*` | LLM1 이력 비교, LLM2·LLM3(LLM1이 이력을 연결했을 때만), 최종 근거 검증 | 296 |
 | B03 | `search_departments` | 정비 부서와 담당 ATA. JASC 후보 앞 두 자리로 순위만 조정 | `query`, `candidate_jasc` | `departments` 8 | - | AI 실행기: 단계마다 고정 확인 (도구 예산 제외) | 459 |
 | R01 | `search_jasc_codes` | JASC 코드 후보와 공식 명칭·정의 | `query`(영어) 또는 `codes` | `jasc_codes` 548 | - | LLM2·LLM3가 골라서 | 0 |

@@ -29,7 +29,6 @@ from .models import (
 )
 
 # repair_requests has no search-scope version yet (team v0.3 section 7); every request is version 1.
-CONTEXT_VERSION = 1
 # Team v0.3 status -> spec v1.0 status.
 STATUS_MAP = {
     "QUEUED": "RECEIVED",
@@ -67,11 +66,12 @@ def history_filter_key(request_id, occurred_from, occurred_to, query):
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def check_context_version(value):
-    if value != CONTEXT_VERSION:
+def check_context_version(value, claims):
+    """The run's context_version is signed into the delegated token by the backend (same as the run row)."""
+    if value != claims["context_version"]:
         raise ToolFailure(
             "CONTEXT_VERSION_CONFLICT",
-            f"context_version is {CONTEXT_VERSION}; call get_request_context again",
+            f"context_version is {claims['context_version']}; call get_request_context again",
         )
 
 
@@ -84,8 +84,8 @@ async def load_request(conn, request_id):
         row = (
             await conn.execute(
                 text(
-                    "SELECT id, tail_number, aircraft_model, airline_code, symptom_text, status, created_at, "
-                    "version FROM repair_requests WHERE id = :id"
+                    "SELECT request_id AS id, tail_number, aircraft_model, airline_code, symptom_text, status, "
+                    "created_at, version FROM agent_request_context WHERE request_id = :id"
                 ),
                 {"id": request_id},
             )
@@ -94,11 +94,29 @@ async def load_request(conn, request_id):
         if is_permission_denied(exc):
             raise ToolFailure(
                 "UPSTREAM_UNAVAILABLE",
-                "mro_business_reader has no SELECT grant on repair_requests (team v0.3 section 7)",
+                "mro_business_reader has no SELECT grant on agent_request_context (Backend V9)",
             ) from exc
         raise
     if row is None:
         raise ToolFailure("NOT_FOUND", "No repair request with this request_id")
+    return row
+
+
+async def load_run(conn, claims):
+    """The search scope the backend registered for this run: the same row rag-mcp pins (Backend V9 view)."""
+    row = (
+        await conn.execute(
+            text(
+                "SELECT context_version, operator_code, model_key, locked_filters, active, expires_at "
+                "FROM agent_run_context WHERE run_id = :run AND request_id = :rid"
+            ),
+            {"run": claims["run_id"], "rid": claims["request_id"]},
+        )
+    ).one_or_none()
+    if row is None or not row.active or row.expires_at <= datetime.now(UTC):
+        raise ToolFailure("FORBIDDEN", "Run is unavailable or revoked")
+    if row.context_version != claims["context_version"]:
+        raise ToolFailure("CONTEXT_VERSION_CONFLICT", "Request context version changed")
     return row
 
 
@@ -145,38 +163,27 @@ def register(mcp: McpServer, source_version: str):
         annotations=READ_ONLY,
     )
     async def get_request_context(request_id: RequestId) -> RequestContextResponse:
-        authorize(request_id)
+        claims = authorize(request_id)
         async with db.read() as conn:
             request = await load_request(conn, request_id)
-            aircraft = (
-                await conn.execute(
-                    text(
-                        "SELECT aircraft_model, airline_code, active FROM aircraft WHERE tail_number = :tail"
-                    ),
-                    {"tail": request.tail_number},
-                )
-            ).one_or_none()
-        missing = []
-        if aircraft is None:
-            missing.append("tail_number")
-        else:
-            if aircraft.airline_code != request.airline_code:
-                missing.append("airline_code")
-            if aircraft.aircraft_model != request.aircraft_model:
-                missing.append("aircraft_model")
-            if not aircraft.active:
-                missing.append("aircraft_active")
-        warnings = [
-            "operator_code is null: search scope is pinned by model only (demo policy, team C02); "
-            "KAL/AAR/JNA are not SDR operators",
-            "reporter_role is not recorded by the backend; reported as other",
-        ]
+            run = await load_run(conn, claims)
+        scope = AppliedScope(
+            operator_code=run.operator_code,
+            model_key=run.model_key,
+            operator_filter_applied=run.operator_code is not None,
+            model_filter_applied=run.model_key is not None,
+            locked_filters=LockedFilters.model_validate(run.locked_filters or {}),
+        )
+        missing = [] if run.model_key else ["model_key"]
+        warnings = []
+        if run.operator_code is None:
+            warnings.append("operator_code is null: search scope is pinned by model only (demo policy, team C02)")
         if missing:
-            warnings.append("Request fields conflict with the aircraft master; model_key withheld")
+            warnings.append("The run has no verified model mapping; RAG searches will ask for input")
         return RequestContextResponse(
             status="NEEDS_INPUT" if missing else "OK",
             request_id=str(request_id),
-            context_version=CONTEXT_VERSION,
+            context_version=run.context_version,
             counts=Counts(scope_count=1, eligible_count=1, returned_count=1),
             warnings=warnings,
             missing_fields=missing,
@@ -189,15 +196,13 @@ def register(mcp: McpServer, source_version: str):
                     registration=request.tail_number,
                     model_raw=request.aircraft_model,
                 ),
-                resolved_scope=AppliedScope(
-                    model_key=None if missing else request.aircraft_model.replace("-", "")
-                ),
-                context_version=CONTEXT_VERSION,
+                resolved_scope=scope,
+                context_version=run.context_version,
                 # JPA @Version starts at 0; the contract requires >= 1.
                 request_version=request.version + 1,
                 status=STATUS_MAP[request.status],
                 missing_fields=missing,
-                locked_filters=LockedFilters(),
+                locked_filters=scope.locked_filters,
             ),
         )
 
@@ -223,8 +228,8 @@ def register(mcp: McpServer, source_version: str):
             str | None, Field(min_length=1, max_length=4096, description="이전 응답의 next_cursor")
         ] = None,
     ) -> HistoryResponse:
-        authorize(request_id)
-        check_context_version(context_version)
+        claims = authorize(request_id)
+        check_context_version(context_version, claims)
         filter_key = history_filter_key(request_id, occurred_from, occurred_to, query)
         async with db.read() as conn:
             request = await load_request(conn, request_id)
@@ -272,7 +277,7 @@ def register(mcp: McpServer, source_version: str):
         return HistoryResponse(
             status="OK" if page else "NO_DATA" if scope_count == 0 else "NO_MATCH",
             request_id=str(request_id),
-            context_version=CONTEXT_VERSION,
+            context_version=claims["context_version"],
             snapshot_ids=[source_version],
             counts=Counts(scope_count=scope_count, eligible_count=eligible_count, returned_count=len(page)),
             next_cursor=next_cursor,
@@ -301,8 +306,8 @@ def register(mcp: McpServer, source_version: str):
         ] = [],  # noqa: B006 - pydantic copies defaults
         limit: Annotated[int, Field(ge=1, le=20, description="반환 상한")] = 5,
     ) -> DepartmentResponse:
-        authorize(request_id)
-        check_context_version(context_version)
+        claims = authorize(request_id)
+        check_context_version(context_version, claims)
         async with db.read() as conn:
             await load_request(conn, request_id)
             rows = (
@@ -330,7 +335,7 @@ def register(mcp: McpServer, source_version: str):
         return DepartmentResponse(
             status="OK" if active else "NO_DATA",
             request_id=str(request_id),
-            context_version=CONTEXT_VERSION,
+            context_version=claims["context_version"],
             counts=Counts(scope_count=len(rows), eligible_count=len(active), returned_count=len(ranked)),
             warnings=warnings,
             items=[
