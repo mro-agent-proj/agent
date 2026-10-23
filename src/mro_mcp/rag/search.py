@@ -313,7 +313,6 @@ class RagSearch:
             ts = any_word_tsquery(args["query"])
         boost = case((db.sdr.c.reported_jasc.in_(args.get("candidate_jasc", [])), 0.03), else_=0.0)
         score = (func.ts_rank_cd(db.sdr.c.search_document, ts) + boost).label("rank")
-        offset = self.page_offset("search_sdr_cases", ctx, args)
         vector = None
         if args.get("search_mode") != "exact" and await self.sdr_vector_ready(conn, ctx, out):
             try:
@@ -321,6 +320,8 @@ class RagSearch:
             except Exception as exc:  # noqa: BLE001 - the lexical half still answers
                 out["warnings"].append(f"VECTOR_UNAVAILABLE: query embedding failed ({type(exc).__name__})")
         if vector is None:
+            page_args = {**args, "_sdr_ranking": "lexical-v2"}
+            offset = self.page_offset("search_sdr_cases", ctx, page_args)
             rows = (
                 (
                     await conn.execute(
@@ -336,9 +337,13 @@ class RagSearch:
             )
             kind = "fusion" if args.get("candidate_jasc") else "lexical"
         else:
-            rows = await self.sdr_fused(conn, ctx, args, ts, score, boost, vector, offset)
+            rows, offset, page_args, bounded = await self.sdr_fused(conn, ctx, args, ts, score, boost, vector)
+            if bounded:
+                out["warnings"].append(
+                    "FUSION_WINDOW: at most 50 candidates per ranking; refine the query for more results"
+                )
             kind = "fusion"
-        selected = self.finish_page("search_sdr_cases", ctx, args, out, rows, offset)
+        selected = self.finish_page("search_sdr_cases", ctx, page_args, out, rows, offset)
         for row in selected:
             p = row["source_payload"]
             refs = (
@@ -385,10 +390,11 @@ class RagSearch:
             out["items"].append(item)
 
 
-    async def sdr_fused(self, conn, ctx, args, ts, lexical_score, boost, vector, offset):
+    async def sdr_fused(self, conn, ctx, args, ts, lexical_score, boost, vector):
         """Reciprocal rank fusion of the lexical and semantic rankings, both inside the pinned scope."""
         e = sdr_vectors.embeddings
-        pool = max(self.FUSION_POOL, offset + args["limit"] + 1)
+        # Keep the same candidate window on every page; growing it changes earlier RRF ranks.
+        pool = self.FUSION_POOL
         lexical = (
             await conn.execute(
                 select(db.sdr.c.id, db.sdr.c.case_id)
@@ -414,14 +420,23 @@ class RagSearch:
             for position, (sdr_id, case_id) in enumerate(ranking, start=1):
                 fused[sdr_id] = fused.get(sdr_id, 0.0) + 1.0 / (self.RRF_K + position)
                 case_ids[sdr_id] = case_id
-        ordered = sorted(fused, key=lambda i: (-fused[i], case_ids[i]))[offset : offset + args["limit"] + 1]
+        ranking = sorted(fused, key=lambda i: (-fused[i], case_ids[i]))
+        # Bind cursors to the actual ranking as well as the run/scope. Reject a changed vector
+        # ranking or lexical fallback instead of interpreting its offset in a different result set.
+        page_args = {**args, "_sdr_ranking": json_hash(
+            {"version": "fusion-v2", "pool": pool, "model": self.query_encoder.version,
+             "ranking": [(str(i), fused[i]) for i in ranking]}
+        )}
+        offset = self.page_offset("search_sdr_cases", ctx, page_args)
+        ordered = ranking[offset : offset + args["limit"] + 1]
+        bounded = len(lexical) == pool or len(semantic) == pool
         if not ordered:
-            return []
+            return [], offset, page_args, bounded
         found = {
             row["id"]: row
             for row in (await conn.execute(select(db.sdr).where(db.sdr.c.id.in_(ordered)))).mappings().all()
         }
-        return [{**found[i], "rank": fused[i]} for i in ordered]
+        return [{**found[i], "rank": fused[i]} for i in ordered], offset, page_args, bounded
 
     async def amm_search(self, conn, ctx, args, out):
         source = db.amm.join(

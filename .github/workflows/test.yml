@@ -32,3 +32,50 @@ jobs:
       - run: psql -h 127.0.0.1 -U mro_owner -d mro_test -v ON_ERROR_STOP=1 -f scripts/create_reader.sql
       - run: make lint
       - run: make test
+
+  business-db:
+    name: Business MCP against Backend Flyway
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.2-pg16
+        env:
+          POSTGRES_USER: mro_owner
+          POSTGRES_PASSWORD: local-dev-only
+          POSTGRES_DB: mro_test_business
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mro_owner -d mro_test_business"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      REQUIRE_BUSINESS_DB_TESTS: '1'
+      BUSINESS_TEST_DATABASE_URL: postgresql+asyncpg://mro_business_reader:business-ci-reader-only@127.0.0.1:5432/mro_test_business
+      BUSINESS_TEST_REQUEST_ID: 2203f693-f8b5-463b-bf56-b93584ef15a8
+      BUSINESS_TEST_RUN_ID: business-ci-run
+      PGPASSWORD: local-dev-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: mro-agent-proj/backend
+          ref: main
+          path: backend-contract
+      - name: Record Backend revision
+        run: git -C backend-contract rev-parse HEAD
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: Apply Backend Flyway migrations to isolated database
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/backend-contract/src/main/resources/db/migration:/flyway/sql:ro" \
+            redgate/flyway:11-alpine \
+            -url=jdbc:postgresql://127.0.0.1:5432/mro_test_business \
+            -user=mro_owner -password=local-dev-only migrate
+      - name: Seed synthetic request and enable restricted reader
+        run: psql -h 127.0.0.1 -U mro_owner -d mro_test_business -v ON_ERROR_STOP=1 -f tests/fixtures/business.sql
+      - name: Required business database tests
+        run: uv run pytest tests/test_business.py -q -rs

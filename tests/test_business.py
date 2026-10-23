@@ -12,6 +12,7 @@ from importlib.resources import files
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from mcp.shared.memory import create_connected_server_and_client_session
+from sqlalchemy import text
 
 from mro_mcp.business import auth
 from mro_mcp.business.server import create_server
@@ -187,6 +188,8 @@ async def test_input_errors_use_the_spec_envelope(offline_server, name, args, co
 DB_URL = os.environ.get("BUSINESS_TEST_DATABASE_URL")
 DB_REQUEST = os.environ.get("BUSINESS_TEST_REQUEST_ID")
 DB_RUN = os.environ.get("BUSINESS_TEST_RUN_ID")  # an active rag_request_contexts row for DB_REQUEST (Backend V9 view)
+if os.environ.get("REQUIRE_BUSINESS_DB_TESTS") == "1" and not (DB_URL and DB_REQUEST and DB_RUN):
+    raise pytest.UsageError("Required business DB tests are missing BUSINESS_TEST_DATABASE_URL/REQUEST_ID/RUN_ID")
 needs_db = pytest.mark.skipif(
     not (DB_URL and DB_REQUEST and DB_RUN), reason="BUSINESS_TEST_DATABASE_URL/REQUEST_ID/RUN_ID not set"
 )
@@ -202,6 +205,12 @@ async def server():
 
 @needs_db
 async def test_seeded_db_round_trip(server):
+    async with server.database.read() as conn:
+        assert await conn.scalar(text("SELECT current_user")) == "mro_business_reader"
+        assert not await conn.scalar(text("SELECT has_table_privilege(current_user, 'users', 'SELECT')"))
+        assert not await conn.scalar(text(
+            "SELECT has_table_privilege(current_user, 'maintenance_history', 'INSERT,UPDATE,DELETE')"
+        ))
     run_claims = {**claims_for(DB_REQUEST), "run_id": DB_RUN}
     context = (await call(server, "get_request_context", {"request_id": DB_REQUEST}, run_claims)).structuredContent
     assert context["status"] == "OK", context["error"]
@@ -214,17 +223,22 @@ async def test_seeded_db_round_trip(server):
 
     args = {"request_id": DB_REQUEST, "context_version": context["context_version"], "limit": 2}
     first = (await call(server, "get_aircraft_history", args, run_claims)).structuredContent
-    assert first["status"] in {"OK", "NO_DATA"}
+    assert first["status"] == "OK"
+    assert first["next_cursor"], "Fixture must exercise B02 pagination"
+    assert {i["history_id"] for i in first["items"]} == {"MH-CI-003", "MH-CI-002"}
     if first["next_cursor"]:
         second = (
             await call(server, "get_aircraft_history", {**args, "cursor": first["next_cursor"]}, run_claims)
         ).structuredContent
-        assert {i["history_id"] for i in first["items"]}.isdisjoint(i["history_id"] for i in second["items"])
+        assert {i["history_id"] for i in second["items"]} == {"MH-CI-001"}
+        assert second["next_cursor"] is None
+        assert all(i["aircraft_id"] == "TEST001" for i in [*first["items"], *second["items"]])
 
     departments = await call(
         server,
         "search_departments",
         {"request_id": DB_REQUEST, "context_version": 1, "candidate_jasc": ["3230"], "limit": 7},
+        run_claims,
     )
     assert departments.structuredContent["items"][0]["department_id"] == "HYD"
     missing = await call(
