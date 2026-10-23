@@ -76,3 +76,26 @@ async def test_technical_docs_fall_back_to_lexical(setup_db):
     assert [i["document_id"] for i in result["items"]] == ["DOC-T-A320"]
     assert result["items"][0]["score_kind"] == "lexical"
     assert any(w.startswith("VECTOR_UNAVAILABLE: no query encoder") for w in result["warnings"])
+
+
+async def test_technical_docs_without_stored_vectors_fall_back_to_lexical(setup_db):
+    """A working query encoder must not hide missing article vectors as NO_MATCH."""
+    from sqlalchemy import delete
+
+    from mro_mcp.rag import tech
+
+    owner, _, _, rid, _ = setup_db
+    await seed_tech(owner)
+    claims, args = await make_context(owner, rid, operator=None, model="A320214")
+    async with owner.begin() as conn:
+        await conn.execute(delete(tech.embeddings).where(tech.embeddings.c.chunk_id == "DOC-T-FLEET-01"))
+    async with await hybrid_caller(FixedQueryEncoder()) as svc:
+        partial = await svc.invoke("search_technical_docs", dict(args, query="wheel vibration"), claims)
+        assert partial["items"][0]["score_kind"] == "vector"
+        assert any(w.startswith("VECTOR_PARTIAL: 1 of 2") for w in partial["warnings"])
+        async with owner.begin() as conn:
+            await conn.execute(delete(tech.embeddings))
+        missing = await svc.invoke("search_technical_docs", dict(args, query="wheel vibration"), claims)
+        assert missing["status"] == "OK" and [i["document_id"] for i in missing["items"]] == ["DOC-T-A320"]
+        assert missing["items"][0]["score_kind"] == "lexical"
+        assert any(w.startswith("VECTOR_UNAVAILABLE: article embeddings are not restored") for w in missing["warnings"])
