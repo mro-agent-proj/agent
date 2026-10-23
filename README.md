@@ -67,6 +67,7 @@ LLM2·LLM3는 지금 R02와 R05만 쓰고 R01·R04는 부르지 않습니다. �
 - SDR·JASC 원문은 영어입니다. R01과 R02의 단어 검색 쪽은 영어 핵심어 2~5개가 좋습니다(예: `brake vibration taxi`, `FLAP SYS 1 FAULT`). 단어 검색에서 한국어 단어는 무시됩니다.
 - **R02 하이브리드** (`explore` 모드):
   - **방식**: 같은 접수 범위에서 단어 검색 상위 50건과 의미 검색 상위 50건을 뽑아 순위를 합칩니다(Reciprocal Rank Fusion, k=60). 결과의 `score`는 합친 순위 점수이고 `score_kind`는 `fusion`입니다.
+  - **페이지**: 후보 집합은 각 검색 상위 50건의 합집합(최대 100건)으로 고정합니다. `next_cursor`는 이 순서 안에서만 이동합니다. 후보 상한에 도달하면 `FUSION_WINDOW` 경고를 반환하므로 더 넓은 탐색은 질의를 구체화해 새로 시작합니다. 순위 또는 벡터/단어 검색 방식이 바뀌면 이전 커서는 `INVALID_CURSOR`로 거부합니다. 배포 전 발급된 R02 커서도 새 질의로 다시 받아야 합니다.
   - **의미 검색 데이터**: SDR 원문 임베딩(Backend V7 `rag.sdr_embeddings`, OpenAI `text-embedding-3-large` 1024차원)을 씁니다. 질의도 같은 모델로 임베딩하며, rag-mcp 환경변수 `RAG_OPENAI_API_KEY`가 필요합니다(질의 한 번에 약 $0.000003).
   - **단어 검색으로 돌아가는 경우**: 키가 없거나, 임베딩이 복원되지 않았거나, 임베딩 호출이 실패하면 지금처럼 단어 검색만 합니다. 이때 `VECTOR_UNAVAILABLE: …` 경고를 남깁니다. `search_mode="exact"`도 단어 검색(구절 일치)만 씁니다.
   - **효과** (정확한 기종 범위, 평가셋 `backend/data/eval/sdr`):
@@ -138,10 +139,23 @@ export TEST_DATABASE_URL=postgresql+asyncpg://mro_owner:local-dev-only@127.0.0.1
 export TEST_RAG_DATABASE_URL=postgresql+asyncpg://mro_reader:local-reader-only@127.0.0.1:55432/mro_test
 DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
 psql ... -f scripts/create_reader.sql
-uv run --extra dev pytest                     # 39개 + backend 실DB가 필요한 1개 skip
+uv run --extra dev pytest                     # RAG DB 테스트; business DB 테스트는 아래 별도 설정
 ```
 
 테스트는 독립 합성 데이터를 만들어 실행하므로 원본 파일이 없어도 재현됩니다.
+
+CI의 `business-db` 작업은 RAG용 Alembic DB와 분리된 `mro_test_business` DB에
+**Backend main의 원본 Flyway 마이그레이션**을 적용합니다. Backend SHA를 로그에 기록하고,
+`tests/fixtures/business.sql`로 가상 기체·부서·요청·실행·과거/미래 이력을 넣습니다.
+실제 business-mcp 구현은 `mro_business_reader`로 접속하여 B01 범위, B02 동일 기체·접수 이전
+이력 및 페이지, B03 담당 부서를 확인합니다. 계정의 쓰기 권한과 users 조회 권한도 검사합니다.
+
+로컬 재현은 `.github/workflows/test.yml`의 `business-db` 순서를 따릅니다.
+`BUSINESS_TEST_DATABASE_URL`, `BUSINESS_TEST_REQUEST_ID`, `BUSINESS_TEST_RUN_ID`를 해당 fixture와
+맞추고 `REQUIRE_BUSINESS_DB_TESTS=1 uv run pytest tests/test_business.py -q -rs`를 실행합니다.
+필수 모드에서는 환경변수 누락이 skip 대신 실패가 됩니다. fixture는 공유 DB에 적용하지 않습니다.
+이 테스트는 실제 MCP 구현과 DB의 연결 검사이며, 공개 HTTP 경로의 종단간 연결이나 실제 LLM
+정확도 평가와는 별개입니다.
 
 ## 코드 구조
 

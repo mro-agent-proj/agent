@@ -39,3 +39,24 @@ async def test_sdr_search_falls_back_to_lexical(setup_db):
         broken = await svc.invoke("search_sdr_cases", dict(args, query="wheel vibration"), claims)
         assert broken["status"] == "OK" and broken["items"][0]["score_kind"] == "lexical"
         assert any("query embedding failed (TimeoutError)" in w for w in broken["warnings"])
+
+
+async def test_cursor_rejects_vector_outage_instead_of_switching_rankings(setup_db):
+    owner, _, _, rid, _ = setup_db
+    await seed_sdr_vectors(owner, rid)
+    claims, args = await make_context(owner, rid, operator=None)
+    encoder = FixedQueryEncoder()
+    async with await hybrid_caller(encoder) as svc:
+        args = dict(args, query="wheel vibration", limit=1)
+        first = await svc.invoke("search_sdr_cases", args, claims)
+        second = await svc.invoke("search_sdr_cases", {**args, "cursor": first["next_cursor"]}, claims)
+        assert second["status"] == "OK"
+        assert first["items"][0]["case_id"] != second["items"][0]["case_id"]
+        encoder.fail = True
+        changed = await svc.invoke("search_sdr_cases", {**args, "cursor": first["next_cursor"]}, claims)
+        assert changed["error"]["code"] == "INVALID_CURSOR"
+        fallback = await svc.invoke("search_sdr_cases", args, claims)
+        assert fallback["status"] == "OK"
+        encoder.fail = False
+        changed = await svc.invoke("search_sdr_cases", {**args, "cursor": fallback["next_cursor"]}, claims)
+        assert changed["error"]["code"] == "INVALID_CURSOR"
