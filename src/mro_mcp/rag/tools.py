@@ -7,7 +7,7 @@ from pydantic import Field, StringConstraints
 
 from ..common.app import McpServer
 from ..common.errors import ToolFailure
-from ..common.models import JascCode
+from ..common.models import JascCode, ScopeLevel
 from .auth import principal
 from .models import AmmResponse, EvidenceResponse, JascResponse, SdrAmmResponse, SdrResponse, TechResponse
 from .search import RagSearch
@@ -72,9 +72,9 @@ def register(mcp: McpServer, search: RagSearch):
         name="search_sdr_cases",
         title="현재 접수 범위 안에서 유사 증상·부품·조치가 기록된 SDR 사례를 찾는다.",
         description=(
-            "접수 기종(model_key) 범위에서 비슷한 증상·부품·조치가 기록된 SDR 사례를 영어 전문검색으로 찾는다. "
+            "Backend가 허용한 기종 범위에서 키워드·벡터 하이브리드 검색으로 SDR 사례를 찾는다. 기본은 동일 기본 모델·세대, FAMILY는 추가 조사용이다. "
             "SDR 원문은 영어다: query는 부품·현상·경고 메시지의 영어 핵심어 2~5개로 쓴다"
-            "(예: 'brake vibration taxi', 'FLAP SYS 1 FAULT', 'exit sign light chime'). 한국어 단어는 무시된다. "
+            "(예: 'brake vibration taxi', 'FLAP SYS 1 FAULT', 'exit sign light chime'). 한국어는 벡터 검색으로 보완한다. "
             "기본(explore)은 단어가 하나라도 맞으면 많이 맞는 순, search_mode='exact'는 구절 그대로 찾는다. "
             "NO_MATCH면 동의어로 바꾼다. "
             "reported_jasc는 확정 원인이 아니며, 근거로 쓸 때 evidence_id를 ref_id로 인용한다."
@@ -87,6 +87,7 @@ def register(mcp: McpServer, search: RagSearch):
         query: Annotated[
             Text, Field(description="증상·부품·경고 메시지 영어 핵심어 2~5개 (예: 'brake vibration taxi')")
         ],
+        scope_level: Annotated[ScopeLevel | None, Field(description="Backend 허용 범위: 기본 MODEL_GENERATION(동일 기본 모델·세대). FAMILY는 기본 범위 조사 후 추가 비교용. EXACT는 동일 세부 모델")] = None,
         candidate_jasc: CandidateJasc = [],  # noqa: B006 - pydantic copies defaults
         search_mode: SearchMode = "explore",
         limit: Limit = 5,
@@ -96,6 +97,7 @@ def register(mcp: McpServer, search: RagSearch):
             request_id=request_id,
             context_version=context_version,
             query=query,
+            scope_level=scope_level,
             candidate_jasc=candidate_jasc,
             search_mode=search_mode,
             limit=limit,

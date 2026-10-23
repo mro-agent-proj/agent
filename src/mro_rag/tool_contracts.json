@@ -1,6 +1,6 @@
 {
-  "catalog_version": "1.0-local-readonly.1",
-  "date": "2026-10-21",
+  "catalog_version": "1.0-local-readonly.2",
+  "date": "2026-10-23",
   "status": "implementation_proposal",
   "notes": [
     "서버에서 구현할 JSON Schema 계약 초안이며 동작하는 MCP 서버가 아니다.",
@@ -11,7 +11,8 @@
     "2026-10-21 사용자 결정: 팀 PDF의 MCP 읽기 전용 원칙에 따라 B04/B05/B06/R06을 카탈로그에서 제외한다. 업무 변경은 Backend, 적재·색인 갱신은 별도 운영 작업이다.",
     "요청 권한·검색 범위·컨텍스트·스냅샷 검증은 Google MCP v1.0을 따른다. readOnlyHint는 설명이며 DB 권한·서버 검증을 대체하지 않는다.",
     "SDR/AMM 근거는 Google R05의 evidence_id로 식별하고 요청 권한·범위·고정 버전으로 재검증한다. Backend Evidence.ref_id 연결은 INTEGRATION_CONTRACT.md를 따른다.",
-    "변경 전 12개 도구 카탈로그는 data/source/airbus-mcp-data-v1/contracts/mcp-tool-contracts.json에 보존되어 있으며 실행 등록용이 아니다."
+    "변경 전 12개 도구 카탈로그는 data/source/airbus-mcp-data-v1/contracts/mcp-tool-contracts.json에 보존되어 있으며 실행 등록용이 아니다.",
+    "2026-10-23 사용자 승인 확장: Backend model_scope로 R02 기본 MODEL_GENERATION 및 추가 FAMILY 검색을 허용한다. R05도 같은 허용 목록으로 검증한다. 원본 Google v1.0 변경 완료를 의미하지 않으며 docs/MODEL_SCOPE.md가 변경 계약이다."
   ],
   "tools": [
     {
@@ -163,6 +164,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -460,6 +514,59 @@
                             "difficulty_to"
                           ],
                           "additionalProperties": false
+                        },
+                        "model_scope": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "policy_version",
+                                "default_level",
+                                "levels"
+                              ],
+                              "properties": {
+                                "policy_version": {
+                                  "const": "airbus-model-scope-v1"
+                                },
+                                "default_level": {
+                                  "type": "string",
+                                  "enum": [
+                                    "EXACT",
+                                    "MODEL_GENERATION",
+                                    "FAMILY"
+                                  ]
+                                },
+                                "levels": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "search_level": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -775,6 +882,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -1390,6 +1550,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -1680,6 +1893,22 @@
               "minLength": 1,
               "maxLength": 4096,
               "description": "서버가 발급한 범위·질의·스냅샷 결합 커서"
+            },
+            "scope_level": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "EXACT",
+                    "MODEL_GENERATION",
+                    "FAMILY"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
           "required": [
@@ -1815,6 +2044,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -2211,6 +2493,41 @@
                     },
                     "maxItems": 30,
                     "description": "문자열 목록"
+                  },
+                  "requested_model_key": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "model_relation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "EXACT",
+                          "MODEL_GENERATION",
+                          "FAMILY"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "configuration_match": {
+                    "anyOf": [
+                      {
+                        "const": "UNVERIFIED"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2496,6 +2813,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -3145,6 +3515,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -3746,6 +4169,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -4075,6 +4551,51 @@
                       },
                       "maxItems": 30,
                       "description": "원문 인용 범위"
+                    },
+                    "requested_model_key": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "model_relation": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "configuration_match": {
+                      "anyOf": [
+                        {
+                          "const": "UNVERIFIED"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "model_key": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -4303,6 +4824,59 @@
                         "difficulty_to"
                       ],
                       "additionalProperties": false
+                    },
+                    "model_scope": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "policy_version",
+                            "default_level",
+                            "levels"
+                          ],
+                          "properties": {
+                            "policy_version": {
+                              "const": "airbus-model-scope-v1"
+                            },
+                            "default_level": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT",
+                                "MODEL_GENERATION",
+                                "FAMILY"
+                              ]
+                            },
+                            "levels": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "search_level": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "EXACT",
+                            "MODEL_GENERATION",
+                            "FAMILY"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [

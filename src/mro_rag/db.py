@@ -309,6 +309,7 @@ contexts = Table(
     release(),
     col("index_ids", JSONB),
     col("mapping_revision"),
+    col("model_scope", JSONB(none_as_null=True), nullable=True),
     col("locked_filters", JSONB),
     col("active", Boolean),
     col("expires_at", DateTime(timezone=True)),

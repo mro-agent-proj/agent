@@ -61,6 +61,7 @@ async def publish_context(
     release_id,
     mapping_revision,
     locked_filters=None,
+    model_scope=None,
     index_keys=None,
     seconds=3600,
 ):
@@ -120,6 +121,7 @@ async def publish_context(
                 "operator_code": operator_code,
                 "model_key": model_key,
                 "mapping_revision": mapping_revision,
+                "model_scope": model_scope,
                 "locked_filters": filters,
             }
             if any(previous[key] != value for key, value in conditions.items()):
@@ -169,6 +171,7 @@ async def publish_context(
             release_id=release_id,
             index_ids=list(indexes),
             mapping_revision=mapping_revision,
+            model_scope=model_scope,
             locked_filters=filters,
             active=True,
             expires_at=datetime.now(UTC) + timedelta(seconds=seconds),

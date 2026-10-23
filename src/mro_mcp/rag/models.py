@@ -31,7 +31,14 @@ class EvidenceFields(Model):
     score_kind: ScoreKind | None
 
 
-class SdrItem(EvidenceFields):
+class ModelRelation(Model):
+    model_key: str | None = None
+    requested_model_key: str | None = None
+    model_relation: Literal["EXACT", "MODEL_GENERATION", "FAMILY"] | None = None
+    configuration_match: Literal["UNVERIFIED"] | None = None
+
+
+class SdrItem(EvidenceFields, ModelRelation):
     source_type: Literal["sdr"]
     source_locator: Locator
     case_id: str
@@ -62,7 +69,7 @@ class AmmItem(EvidenceFields):
     reported_jasc: JascCode | None
 
 
-class SdrAmmItem(AmmItem):
+class SdrAmmItem(AmmItem, ModelRelation):
     sdr_evidence_id: str = Field(description="이 AMM 번호가 인용된 SDR 근거 ID (입력한 EV-SDR-*)")
 
 
@@ -88,7 +95,7 @@ class QuoteSpan(Model):
     text: str
 
 
-class EvidenceRecord(Model):
+class EvidenceRecord(ModelRelation):
     evidence_id: str
     evidence_group_id: str
     source_type: Literal["sdr", "derived_amm_reference", "airbus_technical_article"]

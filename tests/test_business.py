@@ -211,12 +211,14 @@ async def test_seeded_db_round_trip(server):
         assert not await conn.scalar(text(
             "SELECT has_table_privilege(current_user, 'maintenance_history', 'INSERT,UPDATE,DELETE')"
         ))
-    run_claims = {**claims_for(DB_REQUEST), "run_id": DB_RUN}
+    run_claims = {**claims_for(DB_REQUEST), "run_id": DB_RUN, "context_version": 2}
     context = (await call(server, "get_request_context", {"request_id": DB_REQUEST}, run_claims)).structuredContent
     assert context["status"] == "OK", context["error"]
     # B01 returns the scope the backend registered for this run, the same row rag-mcp pins.
     scope = context["result"]["resolved_scope"]
     assert scope["model_key"] and scope["model_filter_applied"] is True
+    assert scope["model_scope"]["levels"]["MODEL_GENERATION"] == ["A320214", "A320232"]
+    assert scope["search_level"] == "MODEL_GENERATION"
     assert context["context_version"] == context["result"]["context_version"] == run_claims["context_version"]
     revoked = await call(server, "get_request_context", {"request_id": DB_REQUEST}, {**run_claims, "run_id": "no-such-run"})
     assert revoked.isError and revoked.structuredContent["error"]["code"] == "FORBIDDEN"
@@ -237,7 +239,7 @@ async def test_seeded_db_round_trip(server):
     departments = await call(
         server,
         "search_departments",
-        {"request_id": DB_REQUEST, "context_version": 1, "candidate_jasc": ["3230"], "limit": 7},
+        {"request_id": DB_REQUEST, "context_version": 2, "candidate_jasc": ["3230"], "limit": 7},
         run_claims,
     )
     assert departments.structuredContent["items"][0]["department_id"] == "HYD"

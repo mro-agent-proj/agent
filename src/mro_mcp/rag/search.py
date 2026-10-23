@@ -19,6 +19,7 @@ from mro_rag.ingest import json_hash
 
 from ..common.db import ReadOnlyDatabase
 from ..common.errors import ToolFailure
+from ..common.scope import allowed_models, model_metadata, model_policy, select_level
 from . import sdr_vectors, tech
 from .sdr_vectors import MODEL_VERSION
 
@@ -73,11 +74,14 @@ class RagSearch:
         async with self.database.read() as conn:
             ctx = await self.resolve(conn, args, claims)
             try:
+                ctx["search_level"] = select_level(ctx, name, args.get("scope_level"))
                 out["snapshot_ids"] = [ctx["release_key"], *ctx["index_ids"]]
                 scoped = name != "search_jasc_codes"
                 out["applied_scope"] = {
                     "operator_code": ctx["operator_code"],
                     "model_key": ctx["model_key"],
+                    "model_scope": model_policy(ctx),
+                    "search_level": ctx["search_level"],
                     # Demo policy (team C02): a context without operator pins the model only.
                     "operator_filter_applied": scoped and ctx["operator_code"] is not None,
                     "model_filter_applied": scoped,
@@ -187,7 +191,7 @@ class RagSearch:
                 )
 
     def scope(self, ctx, locked=True):
-        conditions = [db.sdr.c.release_id == ctx["release_id"], db.sdr.c.model_key == ctx["model_key"]]
+        conditions = [db.sdr.c.release_id == ctx["release_id"], db.sdr.c.model_key.in_(allowed_models(ctx))]
         if ctx["operator_code"] is not None:
             conditions.append(db.sdr.c.operator_code == ctx["operator_code"])
         if locked:
@@ -216,6 +220,8 @@ class RagSearch:
                 "model": ctx["model_key"],
                 "filters": ctx["locked_filters"],
                 "mapping": ctx["mapping_revision"],
+                "model_scope": ctx.get("model_scope"),
+                "search_level": ctx.get("search_level", "EXACT"),
                 "args": {k: v for k, v in args.items() if k != "cursor"},
             }
         )
@@ -375,6 +381,7 @@ class RagSearch:
                     "reported_jasc",
                 )
             }
+            item.update(model_metadata(ctx, row["model_key"]))
             item.update(
                 source_locator=locator(p["locator"]),
                 quote=p["quote"],
@@ -501,7 +508,7 @@ class RagSearch:
         row = (
             (
                 await conn.execute(
-                    select(db.evidence, db.sdr.c.evidence_group_id, db.sdr.c.case_id)
+                    select(db.evidence, db.sdr.c.evidence_group_id, db.sdr.c.case_id, db.sdr.c.model_key)
                     .select_from(source)
                     .where(*self.scope(ctx), db.evidence.c.evidence_id == args["evidence_id"])
                 )
@@ -524,6 +531,7 @@ class RagSearch:
                 "quote",
             )
         }
+        out["result"].update(model_metadata(ctx, row["model_key"]))
         out["result"].update(
             locator=loc,
             text=row["quote"],
@@ -748,7 +756,7 @@ class RagSearch:
         rows = (
             (
                 await conn.execute(
-                    select(db.amm, cited.c.sdr_evidence_id)
+                    select(db.amm, cited.c.sdr_evidence_id, db.sdr.c.model_key)
                     .select_from(source)
                     .where(db.amm.c.release_id == ctx["release_id"], *self.scope(ctx))
                     .order_by(cited.c.sdr_evidence_id, db.amm.c.distilled_record_id)
@@ -784,6 +792,7 @@ class RagSearch:
                     "quote",
                 )
             }
+            item.update(model_metadata(ctx, row["model_key"]))
             item.update(
                 sdr_evidence_id=row["sdr_evidence_id"],
                 locator=locator(p["locator"]),

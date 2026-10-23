@@ -16,6 +16,7 @@ from ..common.app import McpServer
 from ..common.db import is_permission_denied
 from ..common.errors import ToolFailure
 from ..common.models import AppliedScope, Counts, JascCode, Locator, LockedFilters
+from ..common.scope import model_policy
 from .auth import authorize
 from .models import (
     AircraftRef,
@@ -107,7 +108,7 @@ async def load_run(conn, claims):
     row = (
         await conn.execute(
             text(
-                "SELECT context_version, operator_code, model_key, locked_filters, active, expires_at "
+                "SELECT context_version, operator_code, model_key, locked_filters, active, expires_at, model_scope "
                 "FROM agent_run_context WHERE run_id = :run AND request_id = :rid"
             ),
             {"run": claims["run_id"], "rid": claims["request_id"]},
@@ -167,7 +168,9 @@ def register(mcp: McpServer, source_version: str):
         async with db.read() as conn:
             request = await load_request(conn, request_id)
             run = await load_run(conn, claims)
+        policy = model_policy({"model_key": run.model_key, "model_scope": run.model_scope})
         scope = AppliedScope(
+            model_scope=policy, search_level=policy["default_level"] if policy else "EXACT",
             operator_code=run.operator_code,
             model_key=run.model_key,
             operator_filter_applied=run.operator_code is not None,
