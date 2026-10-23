@@ -581,9 +581,22 @@ class RagSearch:
             else 0.0
         )
         vector = None
+        # Stored article vectors for the eligible chunks: without them the vector JOIN would silently
+        # return nothing (NO_MATCH) even though the articles exist.
+        embedded = await conn.scalar(
+            select(func.count())
+            .select_from(c.join(e, and_(e.c.chunk_id == c.c.chunk_id, e.c.embedding_model_version == MODEL_VERSION)))
+            .where(*eligible)
+        )
         if self.query_encoder is None:
             out["warnings"].append("VECTOR_UNAVAILABLE: no query encoder configured; lexical ranking only")
+        elif not embedded and out["counts"]["eligible_count"]:
+            out["warnings"].append("VECTOR_UNAVAILABLE: article embeddings are not restored; lexical ranking only")
         else:
+            if embedded < out["counts"]["eligible_count"]:
+                out["warnings"].append(
+                    f"VECTOR_PARTIAL: {embedded} of {out['counts']['eligible_count']} eligible chunks have embeddings"
+                )
             try:
                 vector = await self.query_encoder.encode(args["query"])
             except Exception as exc:  # noqa: BLE001 - the lexical ranking still answers
