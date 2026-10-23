@@ -1,5 +1,7 @@
 # FastAPI AI 서버와 MCP 연결
 
+> 2026-10-23 변경: 아래 초기 정확 모델 검색 설명은 [단계별 모델 범위 계약](MODEL_SCOPE.md)으로 보완된다. 최신 실행 범위·배포 의존성은 해당 문서를 우선한다.
+
 기준: [LLM PR #1](https://github.com/mro-agent-proj/LLM/pull/1)의
 `4dd40f3`(FastAPI + RabbitMQ 실행기), agent의 FastMCP PR
 [#3](https://github.com/mro-agent-proj/agent/pull/3)·[#4](https://github.com/mro-agent-proj/agent/pull/4).

@@ -1,5 +1,7 @@
 # MRO 정비 근거 MCP (business-mcp · rag-mcp)
 
+현재 SDR 모델 범위 확장과 서비스 간 적용 순서는 [모델 검색 범위 계약](docs/MODEL_SCOPE.md)을 따른다.
+
 AI 서버가 정비 요청을 판단할 때 쓰는 **읽기 전용 MCP 서버 두 개(도구 9개)**와, 그 근거 데이터(SDR 사례·AMM 참조·JASC)를 만드는 적재 도구입니다.
 Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. 업무 상태를 바꾸거나 LLM을 실행하지 않습니다.
 

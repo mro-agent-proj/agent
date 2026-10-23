@@ -1,5 +1,7 @@
 # Backend 연결 안내
 
+> 2026-10-23 변경: 아래 초기 정확 모델 검색 설명은 [단계별 모델 범위 계약](../../docs/MODEL_SCOPE.md)으로 보완된다. 최신 실행 범위·배포 의존성은 해당 문서를 우선한다.
+
 확인 기준: [backend 0fc8caf](https://github.com/mro-agent-proj/backend/tree/0fc8caf575b5a1a89e8fbdaa9989866f5654d9ac), 2026-10-21. 최신 팀 PDF 본문 v0.3을 반영했습니다. 이번 작업에서 Backend 저장소는 읽기만 했습니다. 세부 충돌은 [규약 검토 보고서](../../reports/team-interface-v03-review.md)에 있습니다.
 
 ## 실제 구조와 DB 통합

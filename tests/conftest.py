@@ -238,7 +238,7 @@ def legacy_outputs():
 LEGACY_OUTPUTS = legacy_outputs()
 
 
-async def make_context(owner, release_id, *, operator="TESTA", model="A320214", filters=None):
+async def make_context(owner, release_id, *, operator="TESTA", model="A320214", filters=None, model_scope=None):
     run = "test-" + uuid4().hex
     async with owner.begin() as conn:
         await publish_context(
@@ -253,6 +253,7 @@ async def make_context(owner, release_id, *, operator="TESTA", model="A320214", 
             release_id=release_id,
             mapping_revision="synthetic-v1",
             locked_filters=filters,
+            model_scope=model_scope,
         )
     claims = {"run_id": run, "request_id": run, "context_version": 1, "sub": "alice", "tenant_id": "tenant-a"}
     return claims, {"request_id": run, "context_version": 1}

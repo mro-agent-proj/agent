@@ -34,7 +34,18 @@ class LockedFilters(Model):
     difficulty_to: date | None = None
 
 
+ScopeLevel = Literal["EXACT", "MODEL_GENERATION", "FAMILY"]
+
+
+class ModelScope(Model):
+    policy_version: Literal["airbus-model-scope-v1"]
+    default_level: ScopeLevel
+    levels: dict[ScopeLevel, list[str]]
+
+
 class AppliedScope(Model):
+    model_scope: ModelScope | None = None
+    search_level: ScopeLevel | None = None
     operator_code: str | None = None
     model_key: str | None = None
     operator_filter_applied: bool = False

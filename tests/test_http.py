@@ -31,9 +31,13 @@ def test_token_expiry_audience_signature():
         verify_token(JWT_SECRET, jwt.encode(claims, JWT_SECRET, algorithm="HS256"))
 
 
-async def test_streamable_http_tool_contract_and_authorization(setup_db, tmp_path):
+@pytest.mark.parametrize("expanded", [False, True])
+async def test_streamable_http_tool_contract_and_authorization(setup_db, tmp_path, expanded):
     owner, _, _, rid, _ = setup_db
-    claims, args = await make_context(owner, rid)
+    policy = {"policy_version": "airbus-model-scope-v1", "default_level": "MODEL_GENERATION",
+              "levels": {"EXACT": ["A320214"], "MODEL_GENERATION": ["A320214", "A320232"],
+                         "FAMILY": ["A320214", "A320232", "A321211"]}} if expanded else None
+    claims, args = await make_context(owner, rid, model_scope=policy)
     token = issue_token(
         JWT_SECRET,
         subject_id=claims["sub"],
@@ -95,6 +99,12 @@ async def test_streamable_http_tool_contract_and_authorization(setup_db, tmp_pat
             assert all(t.annotations.readOnlyHint for t in listed.tools)
             r = await session.call_tool("search_jasc_codes", dict(args, codes=["3210"]))
             assert not r.isError and r.structuredContent["status"] == "OK"
+            sdr = await session.call_tool("search_sdr_cases", dict(args, query="wheel"))
+            assert not sdr.isError
+            result = sdr.structuredContent
+            assert result["applied_scope"]["search_level"] == ("MODEL_GENERATION" if expanded else "EXACT")
+            evidence = await session.call_tool("get_evidence", dict(args, evidence_id=result["items"][0]["evidence_id"]))
+            assert not evidence.isError and evidence.structuredContent["result"]["model_relation"] == "EXACT"
             bad = await session.call_tool(
                 "search_sdr_cases", dict(args, query="wheel", operator_code="OTHER")
             )

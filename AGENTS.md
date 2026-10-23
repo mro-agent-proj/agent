@@ -22,7 +22,7 @@
 - SDR/AMM의 `Evidence.ref_id`는 반환된 `evidence_id` 그대로다. HISTORY는 `MH-*`를 B02로 확인한다. AMM 번호나 source_id를 근거 ID로 대체하지 않는다. 동일 `evidence_group_id`의 파생 근거를 독립 근거로 중복 계산하지 않는다.
 - v0.3에서는 AI 실행기가 `COMPLETED` 발행 전에 B02/R05로 근거를 검증하고 Spring이 상태 변경·배정을 실행한다. LLM의 자체 검토 문구를 실제 도구 검증으로 인정하지 않는다. Backend의 `VALIDATION_FAILED` 사유 처리 불일치는 [C03](reports/team-interface-v03-review.md#c03-근거-검증-실패-사유가-backend에서-변경됨)을 추적한다.
 - 현재 구현의 위임 JWT·실행 컨텍스트·고정 release/index·버전 검사를 보존한다. 전달 방식 변경 시 요청 권한과 검색 스냅샷을 어떻게 유지하는지 계약과 테스트를 먼저 맞춘다. `repair_requests.version`과 `context_version`은 다르다.
-- KAL/AAR/JNA를 원본 SDR 운항사에 임의 매핑하지 않는다. 항공사×정확 모델 범위를 유지하며 미확정은 `NEEDS_INPUT`이다. 모델만 검색하는 시연안은 Google 명세와의 변경 합의 전에는 구현하지 않는다.
+- KAL/AAR/JNA를 원본 SDR 운항사에 임의 매핑하지 않는다. 기존 Backend 운항사 정책을 보존한다. 2026-10-23 사용자 승인에 따라 R02는 Backend 허용 목록의 동일 기본 모델·세대를 기본으로, 같은 계열을 추가 조사 범위로 제공한다. R05·AI·Backend 최종 검증도 같은 목록을 따른다. 새 정책이 없는 요청은 정확 모델을 유지한다. [변경 계약](docs/MODEL_SCOPE.md)은 원본 팀 문서와 구분한다.
 
 ## 후속 AI 연결
 

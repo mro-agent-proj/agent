@@ -59,7 +59,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: mro-agent-proj/backend
-          ref: main
+          # V11 contract dependency; pinned to the reviewed Backend scope change.
+          ref: 4c54f970c6582e823963b404c1a9a91445a26643
           path: backend-contract
       - name: Record Backend revision
         run: git -C backend-contract rev-parse HEAD

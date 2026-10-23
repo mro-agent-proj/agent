@@ -28,5 +28,7 @@ INSERT INTO knowledge_releases (id, release_key, source_snapshot_id, package_ver
    'synthetic', 'synthetic', '{}', '{}', 'READY', now());
 INSERT INTO rag_request_contexts (run_id, request_id, context_version, subject_id, tenant_id, model_key,
   release_id, index_ids, mapping_revision, locked_filters, active, expires_at) VALUES
-  ('business-ci-run', '2203f693-f8b5-463b-bf56-b93584ef15a8', 1, 'reporter', 'KAL', 'A320214',
+  ('business-ci-run', '2203f693-f8b5-463b-bf56-b93584ef15a8', 2, 'reporter', 'KAL', 'A320214',
    '00000000-0000-4000-8000-000000000002', '[]', 'synthetic', '{}', true, now() + interval '1 hour');
+
+UPDATE rag_request_contexts SET model_scope = '{"policy_version":"airbus-model-scope-v1","default_level":"MODEL_GENERATION","levels":{"EXACT":["A320214"],"MODEL_GENERATION":["A320214","A320232"],"FAMILY":["A320214","A320232","A321211"]}}'::jsonb WHERE run_id = 'business-ci-run';
