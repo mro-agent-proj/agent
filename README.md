@@ -65,6 +65,10 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 
 2026-10-23 서비스 200건 실행에서는 LLM2가 R01 77회·R02 84회를 호출했고, 최종 실행기가 R05 97회와 SDR→AMM 조회 29회를 호출했습니다. R04 호출은 관찰되지 않았습니다. 이는 해당 실행의 체크포인트 집계이며 도구 사용을 강제하는 규칙은 아닙니다.
 
+[9개 도구의 단계별 사용 표와 확인 범위](docs/LIVE_EVALUATION_20261023.md),
+[200건 결과·감사 기록 정본](https://github.com/mro-agent-proj/deliverables/tree/main/evaluations/2026-10-23-isolated-200)을 함께 확인할 수 있습니다.
+2026-10-26 자료 게시이며 새 실행이나 RAG 검색 정확도 평가가 아닙니다.
+
 B02 차단은 LLM 저장소의 LangGraph 입력 격리·도구 gateway에서 수행합니다. MCP 서버는 B02를 유지하며 LLM1/LLM3/최종 검증에 제공합니다. 현재 JWT audience는 business/rag 서버를 구분하므로, MCP 토큰 자체가 LLM 단계별 권한을 구분한다고 해석하지 않습니다.
 
 도구 제목과 입력 스키마는 `docs/spec-v1/mcp-tool-contracts.json`과 일치해야 하고, 응답은 같은 파일의 출력 스키마로 검증합니다(테스트가 확인). 도구 설명(description)은 AI가 도구를 고를 때 읽는 문구라서 검색 요령을 여기에 적습니다.
