@@ -1,9 +1,9 @@
 # MRO 정비 근거 MCP (business-mcp · rag-mcp)
 
-현재 SDR 모델 범위 확장과 서비스 간 적용 순서는 [모델 검색 범위 계약](docs/MODEL_SCOPE.md)을 따른다.
-
 AI 서버가 정비 요청을 판단할 때 쓰는 **읽기 전용 MCP 서버 두 개(도구 9개)**와, 그 근거 데이터(SDR 사례·AMM 참조·JASC)를 만드는 적재 도구입니다.
 Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. 업무 상태를 바꾸거나 LLM을 실행하지 않습니다.
+
+> 모델 검색 범위 확장과 서비스 간 적용 순서는 [모델 검색 범위 계약](docs/MODEL_SCOPE.md)을 따릅니다.
 
 ## 전체 구성에서의 위치
 
@@ -19,6 +19,16 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 | [backend](https://github.com/mro-agent-proj/backend) | DB·계정·데이터 복원, 실행별 검색 범위 등록과 MCP 토큰 발급 |
 | [LLM](https://github.com/mro-agent-proj/LLM) | AI 서버. 이 레포의 두 MCP를 `streamable_http`로 호출 |
 | [agent](https://github.com/mro-agent-proj/agent) | 이 레포 |
+| [integration](https://github.com/mro-agent-proj/integration) | 서비스 4개의 검증된 커밋 조합, 로컬 실행·평가 스크립트 (봇이 자동 갱신) |
+| [infra](https://github.com/mro-agent-proj/infra) | AWS 인프라(Terraform)와 운영 배포. 배포는 여기서만 합니다 |
+| [deliverables](https://github.com/mro-agent-proj/deliverables) | 최종 결과보고서, 아키텍처 다이어그램 등 산출물 |
+
+## 변경과 배포
+
+1. 이 레포에 PR을 올립니다. main은 PR과 CI 통과가 필수입니다.
+2. main에 병합되면 Release 워크플로가 이 커밋의 이미지를 ECR에(태그 = 커밋 SHA) 올리고 [integration](https://github.com/mro-agent-proj/integration)에 알립니다.
+3. integration이 네 서비스 main을 모아 통합 검증을 통과하면 `verified-*` 태그를 붙입니다.
+4. [infra](https://github.com/mro-agent-proj/infra)에 release PR이 올라오고, 병합·승인하면 운영에 배포됩니다.
 
 ## MCP 서버와 도구 전체
 
