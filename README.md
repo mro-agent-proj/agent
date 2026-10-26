@@ -75,7 +75,7 @@ B02 차단은 LLM 저장소의 LangGraph 입력 격리·도구 gateway에서 수
 
 ### 인증과 검색 범위
 
-- 두 서버 모두 **backend가 실행마다 서명한 토큰**을 검증합니다(HS256, iss `mro-backend`). business는 aud `mro-business`, rag는 aud `mro-rag`이며, 다른 서버용 토큰은 401입니다. 헬스 경로(`/health`, `/health/live`, `/health/ready`)만 토큰 없이 열려 있습니다.
+- 두 서버 모두 **backend가 실행마다 서명한 토큰**을 검증합니다(HS256, iss `mro-backend`). business는 aud `mro-business`, rag는 aud `mro-rag`이며, 다른 서버용 토큰은 401입니다. 헬스 경로(`/health`, `/health/live`, `/health/ready`)와 지표 `/metrics`만 토큰 없이 열려 있습니다.
 - 도구는 **토큰에 적힌 `request_id`의 접수 건만** 읽습니다. 다른 요청을 조회하면 `FORBIDDEN`입니다.
 - rag-mcp는 토큰의 `run_id`로 `rag_request_contexts`의 검색 범위(릴리스·색인·기종·고정 조건)를 찾아 고정합니다.
 - **시연 정책**: backend가 운항사를 비우고 기종만 고정합니다(KAL·AAR·JNA는 SDR 운항사가 아님). 운항사가 없는 범위에서는 운항사 필터를 적용하지 않고 `operator_filter_applied=false`로 알립니다. 운항사가 지정되면 기존처럼 엄격하게 필터링합니다.
@@ -113,6 +113,8 @@ cp .env.mcp.example .env.mcp      # 값 채우기 (아래 표)
 docker compose --env-file .env.mcp -f compose.mcp.yaml up -d --build
 curl http://127.0.0.1:8101/health/ready && curl http://127.0.0.1:8102/health/ready
 ```
+
+두 서버 모두 `GET /metrics`(Prometheus 형식)를 노출합니다. 도구별 호출 수·상태·오류 코드 `mro_mcp_tool_calls_total`, 지연 `mro_mcp_tool_call_duration_seconds`, 반환 건수 `mro_mcp_tool_returned_items`, 코드가 붙은 경고 `mro_mcp_tool_warnings_total{code}`(예: `VECTOR_UNAVAILABLE`)입니다. 코드 없는 안내 문구는 세지 않습니다.
 
 | `.env.mcp` | 값 |
 | --- | --- |
