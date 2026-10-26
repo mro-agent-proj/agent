@@ -35,7 +35,7 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 - 모든 도구는 `request_id`(토큰과 같아야 함)를, rag-mcp 도구는 `context_version`도 받습니다. 검색 도구는 `limit`·`cursor`로 페이지를 넘깁니다.
 - **AMM은 판단 근거가 아니라 배정 후 참고 정보**입니다. 확장 도구가 근거 SDR의 AMM 번호를 정비팀 화면의 "참고 AMM"으로 붙입니다.
 - B02 차단은 AI 서버의 LangGraph 입력 격리·도구 gateway에서 합니다. MCP 토큰은 서버(business/rag)만 구분하고 LLM 단계별 권한은 구분하지 않습니다.
-- 입력 스키마·근거 ID 형식·과거 호출 수·검색 방식 상세는 [docs/TOOLS.md](docs/TOOLS.md)에 있습니다. 도구 계약 원본은 `docs/spec-v1/mcp-tool-contracts.json`이며 테스트가 일치를 확인합니다.
+- 입력 스키마·근거 ID 형식·검색 방식 상세는 [docs/TOOLS.md](docs/TOOLS.md)에 있습니다. 도구 계약 원본은 `docs/spec-v1/mcp-tool-contracts.json`이며 테스트가 일치를 확인합니다.
 
 ## 인증과 검색 범위
 
@@ -50,7 +50,6 @@ Python 3.12, PostgreSQL 16 + pgvector, MCP Streamable HTTP로 동작합니다. �
 - **효과**(평가셋 `backend/data/eval/sdr`, 상위 5건 ATA 일치): SDR 원문 영어 52% → 68%, 증상 영어 59% → 74%, 증상 한국어 28% → 64%. 질의당 중앙값 0.42초.
 - **R01·단어 검색**: 원문이 영어라 영어 핵심어 2~5개가 좋습니다. 한국어 단어는 단어 검색에서 무시됩니다.
 - **R04**: 정비 기사 23편만, 접수 기종군 또는 전 기종 기사만 돌려줍니다. 적용 범위 미상 기사는 `include_unknown_applicability=true`일 때만 포함합니다.
-- 검색 점수는 진단 정확도나 정답 확률이 아닙니다. AMM 자료는 SDR에서 추출한 참조번호·인용 맥락이지 실제 정비 절차가 아닙니다.
 
 ## 실행 (backend와 함께)
 
@@ -123,7 +122,7 @@ docker/             business-mcp, rag-mcp Dockerfile
 | [RUNBOOK.md](docs/RUNBOOK.md) | 격리 로컬 DB 제작, 적재, 임베딩 |
 | [TESTING.md](docs/TESTING.md) | DB 연결 테스트 |
 | [MODEL_SCOPE.md](docs/MODEL_SCOPE.md) | 모델 검색 범위 확장과 서비스 간 적용 순서 |
-| [LIVE_EVALUATION_20261023.md](docs/LIVE_EVALUATION_20261023.md) | 2026-10-23 200건 실행의 단계별 도구 사용 |
+| [LIVE_EVALUATION_20261023.md](docs/LIVE_EVALUATION_20261023.md) | 서비스 200건 실행의 단계별 도구 사용 |
 | [DB_DESIGN.md](docs/DB_DESIGN.md), [DATA_MAPPING.md](docs/DATA_MAPPING.md), [INTEGRATION_CONTRACT.md](docs/INTEGRATION_CONTRACT.md) | DB 설계, 데이터 매핑, 도구 계약 |
 | [integration/backend](integration/backend/README.md) | Backend 통합: Flyway SQL, 내부 컨텍스트 계약 |
 | [TEAM_DISCUSSION.md](docs/TEAM_DISCUSSION.md), [WORK_PLAN.md](docs/WORK_PLAN.md) | 팀 논의(C01~C04), 작업 현황 |
