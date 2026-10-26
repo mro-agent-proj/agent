@@ -11,11 +11,12 @@ from starlette.responses import JSONResponse
 
 from mro_rag.context import verify_token
 
-HEALTH_PATHS = {"/health", "/health/live", "/health/ready"}
+# Probes and the Prometheus scrape stay open; neither returns request data.
+HEALTH_PATHS = {"/health", "/health/live", "/health/ready", "/metrics"}
 
 
 class BearerAuthMiddleware:
-    """Rejects /mcp without a valid token; exact health paths stay open for probes."""
+    """Rejects /mcp without a valid token; exact health and metrics paths stay open for probes."""
 
     def __init__(self, app, secret, audience, principal: ContextVar, realm):
         self.app, self.secret, self.audience, self.principal, self.realm = app, secret, audience, principal, realm

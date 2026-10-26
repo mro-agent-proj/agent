@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
+from . import metrics
 from .db import ReadOnlyDatabase
 from .errors import ToolFailure, failure_response
 from .models import ResponseBase
@@ -62,6 +63,7 @@ class McpServer(FastMCP):
         self.custom_route("/health", methods=["GET"])(self._health)
         self.custom_route("/health/ready", methods=["GET"])(self._health)
         self.custom_route("/health/live", methods=["GET"])(self._live)
+        self.custom_route("/metrics", methods=["GET"])(metrics.metrics_endpoint)
 
     def add_tool(self, fn, name=None, **kwargs):
         response_cls = get_type_hints(fn).get("return")
@@ -114,8 +116,8 @@ class McpServer(FastMCP):
             content=[TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))],
         )
 
-    @staticmethod
-    def _log(name, payload, started):
+    def _log(self, name, payload, started):
+        metrics.observe(self.name, name, payload, time.monotonic() - started)
         LOG.info(
             "tool=%s trace=%s status=%s returned=%s error=%s ms=%d",
             name,
